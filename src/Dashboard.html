@@ -7,53 +7,91 @@
 <meta name="referrer" content="no-referrer">
 <title>EmailSpamdetection</title>
 <style>
-  :root { --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --muted:#5b6474; --line:#e2e5ea; --accent:#1f6feb; --accent-ink:#fff;
-          --danger:#c62828; --danger-bg:#fdecea; --warn:#9a5b00; --warn-bg:#fff4e0; --ok:#2e7d32; --ok-bg:#e8f5e9; }
+  :root { --bg:#f3f5f8; --card:#fff; --ink:#151b26; --muted:#5b6474; --line:#e1e5eb; --accent:#1a66e0; --accent-ink:#fff;
+          --danger:#c62828; --danger-bg:#fdecea; --warn:#8a5300; --warn-bg:#fff3dc; --ok:#1e7a34; --ok-bg:#e6f4ea; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#0f1218; --card:#171b23; --ink:#e7eaf0; --muted:#9aa3b2; --line:#2a303b; --accent:#5b9cff; --accent-ink:#0b1020;
             --danger:#ff7b7b; --danger-bg:#3a1d1d; --warn:#f0b35a; --warn-bg:#3a2c14; --ok:#6fd38a; --ok-bg:#16301d; }
   }
-  * { box-sizing: border-box; }
-  body { margin:0; font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
   header { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--line); }
-  .bar { display:flex; align-items:center; gap:10px; padding:10px 14px; max-width:880px; margin:0 auto; }
-  .bar h1 { font-size:17px; margin:0; flex:1; }
-  nav { display:flex; gap:4px; overflow-x:auto; padding:0 10px 8px; max-width:880px; margin:0 auto; }
-  nav button { border:0; background:none; color:var(--muted); padding:8px 11px; border-radius:8px; font:inherit; white-space:nowrap; cursor:pointer; }
-  nav button[aria-selected="true"] { background:var(--bg); color:var(--ink); font-weight:600; }
-  main { padding:14px; max-width:880px; margin:0 auto; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
-  .card h2 { font-size:16px; margin:0 0 6px; }
-  .muted { color:var(--muted); }
-  .small { font-size:13px; }
+  .bar { display:flex; align-items:center; gap:8px; padding:10px 14px 2px; max-width:720px; margin:0 auto; }
+  .bar h1 { font-size:17px; margin:0; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  nav { display:grid; grid-template-columns:repeat(5,1fr); max-width:720px; margin:0 auto; padding:2px 4px 6px; }
+  nav button { position:relative; border:0; background:none; color:var(--muted); padding:6px 2px 7px; font:inherit; font-size:12px; line-height:1.2;
+               cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; min-height:56px; border-radius:12px; }
+  nav button .ico { font-size:22px; line-height:1; }
+  nav button[aria-selected="true"] { color:var(--accent); font-weight:700; background:var(--bg); }
+  .badge { position:absolute; top:1px; left:calc(50% + 6px); min-width:19px; height:19px; padding:0 5px; border-radius:10px; background:var(--danger);
+           color:#fff; font-size:11px; font-weight:700; line-height:19px; text-align:center; }
+  main, #banner { max-width:720px; margin:0 auto; }
+  main { padding:12px 12px 40px; }
+  #banner { padding:12px 12px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px; }
+  .card h2 { font-size:19px; margin:0 0 6px; }
+  .card p { margin:6px 0; }
+  h3.section { font-size:15px; margin:18px 4px 8px; }
+  h3.section.bad { color:var(--danger); } h3.section.warn { color:var(--warn); }
+  .hero { text-align:center; padding:22px 18px; }
+  .hero .big { font-size:46px; line-height:1; margin-bottom:8px; }
+  .hero h2 { font-size:22px; }
+  .hero.ok { border-color:var(--ok); }
+  .warnbox { border-color:var(--warn); background:var(--warn-bg); }
+  .badbox { border-color:var(--danger); }
+  ul.checks { text-align:left; margin:12px 0 16px; padding-left:22px; } ul.checks li { margin:6px 0; }
+  .muted { color:var(--muted); } .small { font-size:14px; } .center { text-align:center; }
   .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .row.end { justify-content:flex-end; }
+  .row.two > * { flex:1 1 0; }
+  .stack > * + * { margin-top:10px; }
   .grow { flex:1; min-width:0; }
-  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:12px; }
-  .tile { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
-  .tile b { display:block; font-size:24px; }
-  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .tiles { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+  .tile { text-align:left; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px; font:inherit; color:inherit;
+          cursor:pointer; min-height:98px; }
+  .tile .ico { font-size:22px; line-height:1; } .tile b { display:block; font-size:28px; line-height:1.25; margin-top:4px; }
+  .tile .lbl { color:var(--muted); font-size:14px; }
+  .tile.bad { border-color:var(--danger); } .tile.bad b { color:var(--danger); }
+  .tile.warn { border-color:var(--warn); } .tile.warn b { color:var(--warn); }
+  .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:13px; font-weight:600; }
   .pill.ok { background:var(--ok-bg); color:var(--ok); } .pill.warn { background:var(--warn-bg); color:var(--warn); }
   .pill.bad { background:var(--danger-bg); color:var(--danger); } .pill.plain { background:var(--bg); color:var(--muted); }
-  .btn { border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:9px; padding:8px 12px; font:inherit; cursor:pointer; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; min-height:46px; border:1px solid var(--line); background:var(--card);
+         color:var(--ink); border-radius:12px; padding:10px 16px; font:inherit; font-weight:600; cursor:pointer; text-decoration:none; text-align:center; }
   .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
   .btn.danger { border-color:var(--danger); color:var(--danger); }
+  .btn.ghost { border-color:transparent; color:var(--accent); padding-left:4px; padding-right:4px; }
+  .btn.block { display:flex; width:100%; }
+  .btn.big { min-height:58px; font-size:18px; }
   .btn:disabled { opacity:.55; cursor:default; }
-  a.btn { text-decoration:none; display:inline-block; }
-  ul.reasons { margin:6px 0 0; padding-left:18px; font-size:13px; color:var(--muted); }
+  .chips { display:flex; gap:6px; overflow-x:auto; padding:2px 0; }
+  .chips .btn { min-height:40px; padding:6px 14px; border-radius:999px; white-space:nowrap; }
+  ul.reasons { margin:8px 0 12px; padding-left:20px; font-size:14px; color:var(--muted); }
   .item { border-top:1px solid var(--line); padding:12px 0; } .item:first-of-type { border-top:0; padding-top:4px; }
-  .subject { font-weight:600; word-break:break-word; } .from { font-size:13px; color:var(--muted); word-break:break-all; }
+  .subject { font-weight:600; word-break:break-word; margin-top:4px; }
+  .from { font-size:14px; color:var(--muted); word-break:break-all; }
   input[type=text], input[type=password], input[type=number], input[type=search], select {
-    font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); min-width:0; }
-  label.field { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:8px 0; border-top:1px solid var(--line); }
+    font:inherit; font-size:16px; min-height:46px; padding:8px 12px; border:1px solid var(--line); border-radius:12px; background:var(--card);
+    color:var(--ink); min-width:0; }
+  input[type=checkbox] { width:22px; height:22px; flex:none; }
+  label.field { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:10px 0; border-top:1px solid var(--line); }
   label.field:first-of-type { border-top:0; }
+  label.field input[type=number] { width:96px; }
+  label.check { display:flex; gap:10px; align-items:center; }
+  details.fold { padding:0; }
+  details.fold > summary { list-style:none; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; padding:16px; }
+  details.fold > summary::-webkit-details-marker { display:none; }
+  details.fold > summary::after { content:'\203A'; font-size:24px; line-height:1; color:var(--muted); transform:rotate(90deg); }
+  details.fold[open] > summary::after { transform:rotate(-90deg); }
+  details.fold > .body { padding:0 16px 16px; }
   .secret { display:flex; gap:6px; }
-  #toast { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:10px 14px;
-           border-radius:10px; max-width:90vw; font-size:14px; z-index:20; }
+  #toast { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:var(--ink); color:var(--bg); padding:12px 16px;
+           border-radius:12px; width:max-content; max-width:92vw; font-size:15px; z-index:20; }
   #toast.error { background:var(--danger); color:#fff; }
-  #modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:30; padding:16px; }
-  #modal .sheet { background:var(--card); color:var(--ink); border-radius:14px; padding:18px; max-width:420px; width:100%; }
-  #modal h2 { margin:0 0 8px; font-size:17px; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; justify-content:center; z-index:30; padding:12px; }
+  #modal .sheet { background:var(--card); color:var(--ink); border-radius:18px; padding:20px; max-width:460px; width:100%; }
+  #modal h2 { margin:0 0 8px; font-size:19px; }
+  @media (min-width:600px) { #modal { align-items:center; } }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -61,14 +99,14 @@
 <header>
   <div class="bar"><h1>EmailSpamdetection</h1><span id="status" class="pill plain">Loading</span></div>
   <nav role="tablist" aria-label="Sections">
-    <button role="tab" data-tab="home">Home</button>
-    <button role="tab" data-tab="quarantine">Quarantine</button>
-    <button role="tab" data-tab="review">To remove</button>
-    <button role="tab" data-tab="websites">Websites</button>
-    <button role="tab" data-tab="outbox">Outbox &amp; drafts</button>
-    <button role="tab" data-tab="settings">Settings</button>
+    <button role="tab" data-tab="home"><span class="ico" aria-hidden="true">🏠</span>Home</button>
+    <button role="tab" data-tab="quarantine"><span class="ico" aria-hidden="true">🛡️</span>Held back<span class="badge" id="badge-quarantine" hidden></span></button>
+    <button role="tab" data-tab="review"><span class="ico" aria-hidden="true">🧹</span>Clean up<span class="badge" id="badge-review" hidden></span></button>
+    <button role="tab" data-tab="websites"><span class="ico" aria-hidden="true">📬</span>Senders</button>
+    <button role="tab" data-tab="more"><span class="ico" aria-hidden="true">⚙️</span>More</button>
   </nav>
 </header>
+<div id="banner" hidden></div>
 <main id="view" aria-live="polite"></main>
 <div id="toast" role="status" hidden></div>
 <div id="modal" hidden></div>
@@ -76,7 +114,7 @@
 'use strict';
 // Safety rule for this page: everything that comes from an email (names, subjects, reasons, links) is
 // put on the page as plain text with textContent, never as HTML, so an email cannot run code here.
-var state = { tab: 'home', websites: null, filter: 'suggested', query: '', shown: 50 };
+var state = { tab: 'home', websites: null, filter: 'suggested', query: '', shown: 40 };
 
 function h(tag, attrs) {
   var el = document.createElement(tag);
@@ -103,10 +141,23 @@ function call(fn) {
   var args = Array.prototype.slice.call(arguments, 1);
   return new Promise(function (resolve, reject) {
     var runner = google.script.run
-      .withSuccessHandler(function (r) { if (r && r.ok) resolve(r.data); else reject(new Error((r && r.error) || 'Something went wrong.')); })
+      .withSuccessHandler(function (r) {
+        if (r && r.ok) { resolve(r.data); return; }
+        if (r && safeHref(r.authUrl)) askPermission(r.authUrl);
+        reject(new Error((r && r.error) || 'Something went wrong.'));
+      })
       .withFailureHandler(function () { reject(new Error('Could not reach your Google account. Check your connection and try again.')); });
     runner[fn].apply(runner, args);
   });
+}
+// Shown when Google still needs a permission (on a phone it is easy to untick one).
+function askPermission(url) {
+  var b = document.getElementById('banner');
+  b.replaceChildren(h('div', { class: 'card warnbox' },
+    h('h2', { text: 'Google needs your permission' }),
+    h('p', { class: 'small', text: 'On the Google page, tap Select all, then Continue. Then come back here and tap Home.' }),
+    h('a', { class: 'btn primary block', href: url }, 'Give permission')));
+  b.hidden = false;
 }
 
 var toastTimer = null;
@@ -121,7 +172,7 @@ function confirmBox(title, text, okLabel, danger) {
     function done(v) { m.hidden = true; m.replaceChildren(); resolve(v); }
     m.replaceChildren(h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'mtitle' },
       h('h2', { id: 'mtitle', text: title }), h('p', { text: text }),
-      h('div', { class: 'row end' },
+      h('div', { class: 'row two' },
         h('button', { class: 'btn', onclick: function () { done(false); } }, 'Cancel'),
         h('button', { class: danger ? 'btn danger' : 'btn primary', onclick: function () { done(true); } }, okLabel))));
     m.hidden = false;
@@ -134,91 +185,6 @@ function act(btn, promise, okMessage) {
     .catch(function (e) { toast(e.message, true); throw e; })
     .finally(function () { if (btn) btn.disabled = false; });
 }
-function when(ms) {
-  if (!ms) return '';
-  var d = Date.now() - ms, m = Math.round(d / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return m + ' min ago';
-  if (m < 1440) return Math.round(m / 60) + ' h ago';
-  return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-}
-function view() { return document.getElementById('view'); }
-function show() { var v = view(); v.replaceChildren(); for (var i = 0; i < arguments.length; i++) add(v, arguments[i]); }
-function loading(what) { show(h('div', { class: 'card muted', text: 'Loading ' + what + '...' })); }
-function failed(e) { show(h('div', { class: 'card' }, h('h2', { text: 'Could not load this' }), h('p', { class: 'muted', text: e.message }))); }
-
-/* ---------- Home ---------- */
-function renderHome() {
-  loading('your overview');
-  call('apiOverview').then(function (o) {
-    var status = document.getElementById('status');
-    status.textContent = o.protectionOn ? 'Protected' : 'Off'; status.className = 'pill ' + (o.protectionOn ? 'ok' : 'bad');
-    var checkBtn = h('button', { class: 'btn primary' }, 'Check my inbox now');
-    checkBtn.addEventListener('click', function () {
-      act(checkBtn, call('apiCheckNow'), function (r) { return r.acted ? r.acted + ' risky email(s) moved out of your inbox.' : 'Checked ' + r.checked + ' conversations: nothing risky.'; })
-        .then(renderHome).catch(function () {});
-    });
-    show(
-      h('div', { class: 'card' },
-        h('h2', { text: o.protectionOn ? 'Your inbox is protected' : 'Protection is off' }),
-        h('p', { class: 'muted', text: o.protectionOn
-          ? 'New mail is checked every ' + o.checkEveryMinutes + ' minutes' + (o.lastCheck ? ' (last check ' + when(o.lastCheck) + ').' : '.') + ' Risky emails go to Quarantine. Nothing is deleted without you.'
-          : 'Open the Apps Script editor from your sheet (Extensions > Apps Script) and run "setup" to switch it on.' }),
-        h('div', { class: 'row' }, checkBtn, h('span', { class: 'muted small', text: 'Also re-checks the last 30 days of your inbox.' }))),
-      h('div', { class: 'tiles' },
-        tile(o.dangerous, 'Dangerous', 'quarantine'), tile(o.checkFirst, 'Check first', 'quarantine'),
-        tile(o.caughtThisWeek, 'Caught this week', 'quarantine'), tile(o.toReview, 'Waiting for your review', 'review'),
-        tile(o.websites, 'Websites and lists', 'websites')),
-      alertsCard(o.alerts),
-      h('div', { class: 'card small muted', text: o.scanDone ? 'Websites list: complete.' :
-        'Websites list: still reading your older mail' + (o.scanCursor ? ' (now at ' + new Date(o.scanCursor).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) + ')' : '') + '. This runs in the background.' }),
-      h('p', { class: 'muted small', text: 'Version ' + o.version + ' · signed in as ' + o.owner })
-    );
-  }).catch(failed);
-}
-function tile(n, label, tab) {
-  return h('button', { class: 'tile', style: 'text-align:left;cursor:pointer;font:inherit;color:inherit', onclick: function () { go(tab); } },
-    h('b', { text: String(n) }), h('span', { class: 'muted small', text: label }));
-}
-function alertsCard(alerts) {
-  if (!alerts || !alerts.length) return null;
-  return h('div', { class: 'card', style: 'border-color:var(--danger)' },
-    h('h2', { text: 'Check your account' }),
-    h('p', { class: 'small', text: 'Something unusual left your account. If you did not do this, change your Google password now, then check signed-in devices and your Gmail forwarding settings.' }),
-    alerts.map(function (a) {
-      return h('div', { class: 'item' }, h('div', { class: 'subject', text: a.kind }), h('div', { class: 'from', text: when(a.at) + ' · ' + a.detail }));
-    }));
-}
-
-/* ---------- Quarantine ---------- */
-function renderQuarantine() {
-  loading('quarantine');
-  call('apiQuarantine').then(function (q) {
-    show(
-      h('div', { class: 'card' }, h('h2', { text: 'Dangerous' }),
-        h('p', { class: 'muted small', text: "Don't open links or attachments in these. They are out of your inbox and nothing was deleted." }),
-        q.dangerous.length ? q.dangerous.map(quarantineItem) : h('p', { class: 'muted', text: 'Nothing here.' })),
-      h('div', { class: 'card' }, h('h2', { text: 'Check first' }),
-        h('p', { class: 'muted small', text: 'These looked suspicious. Read the reasons, then decide.' }),
-        q.check.length ? q.check.map(quarantineItem) : h('p', { class: 'muted', text: 'Nothing here.' })));
-  }).catch(failed);
-}
-function quarantineItem(t) {
-  var trust = h('input', { type: 'checkbox', id: 'trust-' + t.id });
-  var box = h('div', { class: 'item' },
-    h('div', { class: 'subject', text: t.subject }),
-    h('div', { class: 'from', text: t.from + ' · ' + when(t.date) }),
-    t.reasons ? h('ul', { class: 'reasons' }, t.reasons.split('; ').map(function (r) { return h('li', { text: r }); })) : null,
-    h('div', { class: 'row', style: 'margin-top:8px' },
-      button('It is safe: back to inbox', '', function (b) { return act(b, call('apiQuarantineAction', t.id, 'restore', trust.checked), 'Moved back to your inbox.'); }),
-      h('label', { class: 'small muted', for: 'trust-' + t.id }, trust, ' always trust this sender'),
-      button('Report spam', '', function (b) { return act(b, call('apiQuarantineAction', t.id, 'spam', false), 'Reported as spam.'); }),
-      button('Remove', 'danger', function (b) {
-        return confirmBox('Remove this email?', 'It goes to Trash, where you can restore it for 30 days.', 'Remove', true)
-          .then(function (ok) { if (ok) return act(b, call('apiQuarantineAction', t.id, 'remove', false), 'Moved to Trash.'); });
-      })));
-  return box;
-}
 function button(label, kind, onClick, after) {
   var b = h('button', { class: 'btn ' + (kind || '') }, label);
   b.addEventListener('click', function () {
@@ -226,18 +192,162 @@ function button(label, kind, onClick, after) {
   });
   return b;
 }
+function when(ms) {
+  if (!ms) return '';
+  var m = Math.round((Date.now() - ms) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + ' min ago';
+  if (m < 1440) return Math.round(m / 60) + ' h ago';
+  return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function month(ms) { return new Date(ms).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }); }
+function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+function view() { return document.getElementById('view'); }
+function show() { var v = view(); v.replaceChildren(); for (var i = 0; i < arguments.length; i++) add(v, arguments[i]); window.scrollTo(0, 0); }
+function loading(what) { show(h('div', { class: 'card muted center', text: 'Loading ' + what + '...' })); }
+function failed(e) {
+  show(h('div', { class: 'card' }, h('h2', { text: 'Could not load this' }), h('p', { class: 'muted', text: e.message }),
+    button('Try again', 'primary block', function () { go(state.tab); })));
+}
+function setStatus(on) {
+  var s = document.getElementById('status');
+  s.textContent = on ? 'Protected' : 'Off'; s.className = 'pill ' + (on ? 'ok' : 'bad');
+}
+function setBadge(tab, n) {
+  var b = document.getElementById('badge-' + tab);
+  b.textContent = n > 99 ? '99+' : String(n || 0); b.hidden = !n;
+}
 
-/* ---------- To remove ---------- */
+/* ---------- Home ---------- */
+function renderHome() {
+  loading('your inbox');
+  call('apiOverview').then(function (o) {
+    setStatus(o.protectionOn);
+    setBadge('quarantine', o.dangerous + o.checkFirst);
+    setBadge('review', o.toReview);
+    if (!o.protectionOn) { show(turnOnCard(o), activityCard(o.activity), footer(o)); return; }
+    var checkBtn = h('button', { class: 'btn primary block big' }, 'Check my inbox now');
+    checkBtn.addEventListener('click', function () {
+      act(checkBtn, call('apiCheckNow'), function (r) {
+        return r.acted ? plural(r.acted, 'risky email', 'risky emails') + ' held back.' : 'Checked ' + r.checked + ' conversations: nothing risky.';
+      }).then(renderHome).catch(function () {});
+    });
+    var held = o.dangerous + o.checkFirst;
+    show(
+      h('div', { class: 'card hero ok' },
+        h('div', { class: 'big', 'aria-hidden': 'true', text: '✅' }),
+        h('h2', { text: "You're protected" }),
+        h('p', { class: 'muted', text: 'New mail is checked every ' + o.checkEveryMinutes + ' minutes' + (o.lastCheck ? ' (last check ' + when(o.lastCheck) + ')' : '') +
+          '. Scams and risky attachments are held back before you open them. Nothing is deleted without you.' }),
+        checkBtn),
+      alertsCard(o.alerts),
+      h('div', { class: 'tiles' },
+        tile('🛡️', held, 'Held back', 'quarantine', o.dangerous ? 'bad' : held ? 'warn' : ''),
+        tile('🧹', o.toReview, 'To review', 'review', o.toReview ? 'warn' : ''),
+        tile('📬', o.websites, 'Senders', 'websites', ''),
+        tile('🎯', o.caughtThisWeek, 'Caught this week', 'quarantine', '')),
+      o.scanDone ? null : h('p', { class: 'muted small center', text: 'Still reading your older mail to list who emails you' +
+        (o.scanCursor ? ' (now at ' + month(o.scanCursor) + ')' : '') + '. This runs by itself.' }),
+      activityCard(o.activity),
+      footer(o));
+  }).catch(failed);
+}
+function turnOnCard(o) {
+  var b = h('button', { class: 'btn primary block big' }, o.setupDone ? 'Turn protection back on' : 'Turn on protection');
+  var note = h('p', { class: 'muted small center', text: 'Takes about a minute the first time. You can switch it off any time under More.' });
+  b.addEventListener('click', function () {
+    var tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
+    b.textContent = 'Turning on and checking your inbox...';
+    act(b, call('apiTurnOn', tz), 'Protection is on.').then(renderHome)
+      .catch(function () { b.textContent = 'Try again'; });
+  });
+  return h('div', { class: 'card hero' },
+    h('div', { class: 'big', 'aria-hidden': 'true', text: '🛡️' }),
+    h('h2', { text: o.setupDone ? 'Protection is off' : 'Last step: switch it on' }),
+    h('p', { class: 'muted', text: 'One tap and EmailSpamdetection starts looking after your Gmail:' }),
+    h('ul', { class: 'checks' },
+      h('li', { text: 'Checks new mail every ' + (o.checkEveryMinutes || 5) + ' minutes and holds back scams and dangerous attachments' }),
+      h('li', { text: 'Lists every website that emails you, with one-tap unsubscribe' }),
+      h('li', { text: 'Suggests old mail to clear out. Nothing is removed until you say so' })),
+    b, note);
+}
+function tile(icon, n, label, tab, tone) {
+  return h('button', { class: 'tile ' + (tone || ''), onclick: function () { go(tab); } },
+    h('span', { class: 'ico', 'aria-hidden': 'true', text: icon }), h('b', { text: String(n) }), h('span', { class: 'lbl', text: label }));
+}
+function alertsCard(alerts) {
+  if (!alerts || !alerts.length) return null;
+  return h('div', { class: 'card badbox' },
+    h('h2', { text: '⚠️ Check your account' }),
+    h('p', { class: 'small', text: 'Something unusual left your account. If this was not you, change your Google password now, then check your signed-in devices and Gmail forwarding.' }),
+    h('a', { class: 'btn primary block', href: 'https://myaccount.google.com/security' }, 'Open Google security'),
+    alerts.map(function (a) {
+      return h('div', { class: 'item' }, h('div', { class: 'subject', text: a.kind }), h('div', { class: 'from', text: when(a.at) + ' · ' + a.detail }));
+    }));
+}
+function activityCard(list) {
+  if (!list || !list.length) return null;
+  return h('details', { class: 'card fold' },
+    h('summary', {}, h('span', { class: 'subject', text: 'Recent activity' })),
+    h('div', { class: 'body' }, list.slice(0, 12).map(function (a) {
+      return h('div', { class: 'item' }, h('div', { class: 'subject', text: a.event }),
+        h('div', { class: 'from', text: [a.subject, a.from, when(a.at)].filter(Boolean).join(' · ') }),
+        a.details ? h('div', { class: 'small muted', text: a.details }) : null);
+    })));
+}
+function footer(o) { return h('p', { class: 'muted small center', text: 'Version ' + o.version + ' · ' + o.owner }); }
+
+/* ---------- Held back ---------- */
+function renderQuarantine() {
+  loading('held-back emails');
+  call('apiQuarantine').then(function (q) {
+    var total = q.dangerous.length + q.check.length;
+    setBadge('quarantine', total);
+    show(
+      h('div', { class: 'card' }, h('h2', { text: total ? 'Held back for you' : 'Nothing held back' }),
+        h('p', { class: 'muted small', text: 'These looked like scams or carried risky files, so they were moved out of your inbox before you opened them. Nothing was deleted.' })),
+      q.dangerous.length ? h('h3', { class: 'section bad', text: 'Dangerous: do not open links or files' }) : null,
+      q.dangerous.map(quarantineItem),
+      q.check.length ? h('h3', { class: 'section warn', text: 'Check first' }) : null,
+      q.check.map(quarantineItem));
+  }).catch(failed);
+}
+function quarantineItem(t) {
+  var trust = h('input', { type: 'checkbox', id: 'trust-' + t.id });
+  var bad = t.level === 'dangerous';
+  return h('div', { class: 'card' },
+    h('div', { class: 'row' }, h('span', { class: 'pill ' + (bad ? 'bad' : 'warn'), text: bad ? 'Dangerous' : 'Check first' }),
+      h('span', { class: 'muted small', text: when(t.date) })),
+    h('div', { class: 'subject', text: t.subject }),
+    h('div', { class: 'from', text: t.from }),
+    t.reasons ? h('ul', { class: 'reasons' }, t.reasons.split('; ').map(function (r) { return h('li', { text: r }); })) : null,
+    h('div', { class: 'stack' },
+      button("It's safe: put it back", 'block', function (b) {
+        return act(b, call('apiQuarantineAction', t.id, 'restore', trust.checked), 'Back in your inbox.');
+      }),
+      h('label', { class: 'check small muted', for: 'trust-' + t.id }, trust, 'Always trust this sender'),
+      h('div', { class: 'row two' },
+        button("It's spam", '', function (b) { return act(b, call('apiQuarantineAction', t.id, 'spam', false), 'Reported as spam.'); }),
+        button('Delete', 'danger', function (b) {
+          return confirmBox('Delete this email?', 'It goes to Trash, where you can get it back for 30 days.', 'Delete', true)
+            .then(function (ok) { if (ok) return act(b, call('apiQuarantineAction', t.id, 'remove', false), 'Moved to Trash.'); });
+        }))));
+}
+
+/* ---------- Clean up ---------- */
 function renderReview() {
-  loading('your review list');
+  loading('your clean-up list');
   call('apiReview').then(function (items) {
     var open = items.filter(function (i) { return !i.decision; });
     var decided = items.filter(function (i) { return i.decision; });
+    setBadge('review', open.length);
     show(
-      h('div', { class: 'card' }, h('h2', { text: 'Review before removing' }),
-        h('p', { class: 'muted small', text: 'Nothing is removed until you press Remove. Removed emails go to Trash, where you can restore them for 30 days. Starred, important and labelled emails are never included.' })),
-      open.length ? open.map(reviewItem) : h('div', { class: 'card muted', text: 'Nothing waiting for you. New suggestions appear after the nightly check.' }),
-      decided.length ? h('div', { class: 'card' }, h('h2', { text: 'Already decided' }), decided.map(reviewItem)) : null);
+      h('div', { class: 'card' }, h('h2', { text: 'Old mail you could clear out' }),
+        h('p', { class: 'muted small', text: 'Nothing is removed until you tap Remove. Removed mail stays in Trash for 30 days. Starred, important and labelled emails are never included.' })),
+      open.length ? open.map(reviewItem) : h('div', { class: 'card muted center', text: 'Nothing waiting for you. New suggestions appear after the nightly check.' }),
+      decided.length ? h('details', { class: 'card fold' }, h('summary', {}, h('span', { class: 'subject', text: 'Already decided (' + decided.length + ')' })),
+        h('div', { class: 'body' }, decided.map(reviewItem))) : null);
   }).catch(failed);
 }
 function reviewItem(i) {
@@ -248,21 +358,21 @@ function reviewItem(i) {
     h('p', { class: 'small', text: i.why }),
     i.examples ? h('p', { class: 'muted small', text: 'For example: ' + i.examples }) : null,
     i.status ? h('p', { class: 'small' }, h('span', { class: 'pill plain', text: i.status })) : null,
-    h('div', { class: 'row' },
-      i.link ? h('a', { class: 'btn', href: i.link }, 'See them in Gmail') : null,
-      !i.decision ? button('Remove', 'danger', function (b) {
-        return confirmBox('Remove ' + i.count + ' emails?', i.what + '. They go to Trash, where you can restore them for 30 days.', 'Remove', true)
+    !i.decision ? h('div', { class: 'row two' },
+      button('Remove', 'danger', function (b) {
+        return confirmBox('Remove ' + i.count + ' emails?', i.what + '. They go to Trash, where you can get them back for 30 days.', 'Remove', true)
           .then(function (ok) { if (ok) return act(b, call('apiReviewDecision', i.key, 'remove'), function (s) { return s || 'Removing.'; }); });
-      }) : null,
-      !i.decision ? button('Keep', '', function (b) { return act(b, call('apiReviewDecision', i.key, 'keep'), 'Kept.'); }) : null,
-      i.decision ? button('Undo', '', function (b) { return act(b, call('apiReviewDecision', i.key, 'undo'), 'Undone.'); }) : null));
+      }),
+      button('Keep', '', function (b) { return act(b, call('apiReviewDecision', i.key, 'keep'), 'Kept.'); })) :
+      button('Undo', '', function (b) { return act(b, call('apiReviewDecision', i.key, 'undo'), 'Undone.'); }),
+    i.link ? h('a', { class: 'btn ghost', href: i.link }, 'See them in Gmail') : null);
 }
 
-/* ---------- Websites ---------- */
+/* ---------- Senders ---------- */
 function renderWebsites(reload) {
   if (state.websites && !reload) { drawWebsites(); return; }
-  loading('your websites');
-  call('apiWebsites').then(function (rows) { state.websites = rows; state.shown = 50; drawWebsites(); }).catch(failed);
+  loading('who emails you');
+  call('apiWebsites').then(function (rows) { state.websites = rows; state.shown = 40; drawWebsites(); }).catch(failed);
 }
 function drawWebsites() {
   var rows = state.websites || [];
@@ -274,124 +384,132 @@ function drawWebsites() {
     if (state.filter === 'accounts') return r.type.indexOf('Account') >= 0;
     return true;
   });
-  var search = h('input', { type: 'search', placeholder: 'Search websites', value: state.query, 'aria-label': 'Search websites', class: 'grow' });
-  search.addEventListener('input', function () { state.query = search.value; state.shown = 50; drawWebsites(); search.focus(); });
+  var search = h('input', { type: 'search', placeholder: 'Search', value: state.query, 'aria-label': 'Search senders', class: 'grow' });
+  search.addEventListener('input', function () { state.query = search.value; state.shown = 40; drawWebsites(); search.focus(); });
   function chip(id, label) {
-    return h('button', { class: 'btn' + (state.filter === id ? ' primary' : ''), onclick: function () { state.filter = id; state.shown = 50; drawWebsites(); } }, label);
+    return h('button', { class: 'btn' + (state.filter === id ? ' primary' : ''), onclick: function () { state.filter = id; state.shown = 40; drawWebsites(); } }, label);
   }
   show(
-    h('div', { class: 'card' },
-      h('h2', { text: rows.length + ' websites and mailing lists email you' }),
-      h('p', { class: 'muted small', text: 'Unsubscribe from what you never open. For spam, use Block instead: unsubscribing from spammers only confirms your address.' }),
+    h('div', { class: 'card stack' },
+      h('h2', { text: plural(rows.length, 'website emails you', 'websites email you') }),
+      h('p', { class: 'muted small', text: 'Unsubscribe from what you never open. For spam, tap Block instead: unsubscribing from spammers only tells them your address works.' }),
       h('div', { class: 'row' }, search),
-      h('div', { class: 'row', style: 'margin-top:8px' }, chip('suggested', 'Suggested'), chip('lists', 'Mailing lists'), chip('accounts', 'Accounts'), chip('all', 'All'))),
-    h('div', { class: 'card' },
-      list.length ? list.slice(0, state.shown).map(websiteItem) : h('p', { class: 'muted', text: 'Nothing matches.' }),
-      list.length > state.shown ? h('button', { class: 'btn', onclick: function () { state.shown += 50; drawWebsites(); } }, 'Show more') : null));
+      h('div', { class: 'chips' }, chip('suggested', 'Suggested'), chip('lists', 'Mailing lists'), chip('accounts', 'Accounts'), chip('all', 'All'))),
+    list.length ? list.slice(0, state.shown).map(websiteItem) : h('div', { class: 'card muted center', text: state.filter === 'suggested' && !q ? 'No suggestions right now. Tap All to see everyone.' : 'Nothing matches.' }),
+    list.length > state.shown ? button('Show more', 'block', function () { state.shown += 40; drawWebsites(); }) : null);
 }
 function websiteItem(r) {
-  var linkSlot = h('span');
+  var linkSlot = h('div');
   var done = function () { renderWebsites(true); };
-  return h('div', { class: 'item' },
+  var extra = h('div', { class: 'row two', hidden: 'hidden' },
+    button('Remove their emails', '', function (b) {
+      return act(b, call('apiCountFrom', r.email)).then(function (n) {
+        return confirmBox('Remove ' + n + ' emails from ' + r.email + '?', 'They go to Trash, where you can get them back for 30 days.', 'Remove', true)
+          .then(function (ok) { if (ok) return act(b, call('apiWebsiteAction', r.email, 'remove'), 'Removing.'); });
+      });
+    }, done),
+    button('Block', 'danger', function (b) {
+      return confirmBox('Block ' + r.email + '?', 'Their old emails go to Trash and new ones are removed when they arrive.', 'Block', true)
+        .then(function (ok) { if (ok) return act(b, call('apiWebsiteAction', r.email, 'block'), 'Blocked.'); });
+    }, done),
+    button('Keep', '', function (b) { return act(b, call('apiWebsiteAction', r.email, 'keep'), 'Kept.'); }, done));
+  var more = h('button', { class: 'btn ghost', 'aria-expanded': 'false' }, 'More options');
+  more.addEventListener('click', function () {
+    extra.hidden = !extra.hidden;
+    more.setAttribute('aria-expanded', String(!extra.hidden));
+    more.textContent = extra.hidden ? 'More options' : 'Fewer options';
+  });
+  return h('div', { class: 'card' },
     h('div', { class: 'row' }, h('span', { class: 'subject grow', text: r.site }), r.suggestion ? h('span', { class: 'pill warn', text: r.suggestion }) : null),
     h('div', { class: 'from', text: (r.name ? r.name + ' · ' : '') + r.email }),
-    h('div', { class: 'small muted', text: r.type + ' · ' + r.emails + ' emails · opened ' + r.opened + '%' + (r.last ? ' · last ' + when(r.last) : '') }),
-    r.status ? h('div', { class: 'small' }, h('span', { class: 'pill plain', text: r.status })) : null,
-    h('div', { class: 'row', style: 'margin-top:6px' },
-      r.unsub ? button('Unsubscribe', '', function (b) {
+    h('div', { class: 'small muted', text: r.type + ' · ' + r.emails + ' emails · you opened ' + r.opened + '%' + (r.last ? ' · last ' + when(r.last) : '') }),
+    r.status ? h('p', { class: 'small' }, h('span', { class: 'pill plain', text: r.status })) : null,
+    h('div', { class: 'row', style: 'margin-top:8px' },
+      r.unsub ? button('Unsubscribe', 'primary', function (b) {
         return act(b, call('apiWebsiteAction', r.email, 'unsubscribe')).then(function (res) {
-          if (res.link) { linkSlot.replaceChildren(h('a', { class: 'btn primary', href: res.link }, 'Open the unsubscribe page')); toast('Finish on their page.'); return undefined; }
+          if (res.link) { linkSlot.replaceChildren(h('a', { class: 'btn primary block', href: res.link }, 'Finish on their unsubscribe page')); toast('Finish on their page.'); return undefined; }
           toast('Unsubscribed.'); return res;
         });
       }, done) : null,
-      button('Remove their emails', '', function (b) {
-        return act(b, call('apiCountFrom', r.email)).then(function (n) {
-          return confirmBox('Remove ' + n + ' emails from ' + r.email + '?', 'They go to Trash, where you can restore them for 30 days.', 'Remove', true)
-            .then(function (ok) { if (ok) return act(b, call('apiWebsiteAction', r.email, 'remove'), 'Removing.'); });
-        });
-      }, done),
-      button('Block', 'danger', function (b) {
-        return confirmBox('Block ' + r.email + '?', 'Their old emails go to Trash and new ones are removed when they arrive.', 'Block', true)
-          .then(function (ok) { if (ok) return act(b, call('apiWebsiteAction', r.email, 'block'), 'Blocked.'); });
-      }, done),
-      button('Keep', '', function (b) { return act(b, call('apiWebsiteAction', r.email, 'keep'), 'Kept.'); }, done),
-      linkSlot));
+      more),
+    extra, linkSlot);
 }
 
-/* ---------- Outbox & drafts ---------- */
-function renderOutbox() {
-  loading('your outbox');
-  call('apiOutgoing').then(function (o) {
-    var old = o.drafts.filter(function (d) { return d.old; });
-    var picks = {};
-    var del = h('button', { class: 'btn danger', disabled: true }, 'Delete selected');
-    function count() { var n = Object.keys(picks).length; del.disabled = !n; del.textContent = n ? 'Delete ' + n + ' selected' : 'Delete selected'; }
-    del.addEventListener('click', function () {
-      var ids = Object.keys(picks);
-      confirmBox('Delete ' + ids.length + ' drafts?', 'Deleted drafts cannot be brought back.', 'Delete', true).then(function (ok) {
-        if (ok) act(del, call('apiDeleteDrafts', ids), function (n) { return n + ' drafts deleted.'; }).then(renderOutbox).catch(function () {});
-      });
-    });
-    show(
-      alertsCard(o.alerts) || h('div', { class: 'card' }, h('h2', { text: 'Nothing unusual' }),
-        h('p', { class: 'muted small', text: 'Your sent mail, drafts and scheduled emails are checked for signs that someone else is using your account: mass emails, risky attachments or links.' })),
-      h('div', { class: 'card' }, h('h2', { text: 'Scheduled to send' }),
-        o.scheduled.length ? o.scheduled.map(function (s) {
-          return h('div', { class: 'item' }, h('div', { class: 'subject', text: s.subject }), h('div', { class: 'from', text: 'To ' + s.to + ' (' + s.recipients + ' people)' }));
-        }) : h('p', { class: 'muted', text: 'Nothing scheduled.' })),
-      h('div', { class: 'card' }, h('h2', { text: 'Old drafts (' + old.length + ')' }),
-        h('p', { class: 'muted small', text: 'Drafts older than ' + o.draftDays + ' days. Pick the ones you will never send. ' + (o.drafts.length - old.length) + ' newer drafts are not shown.' }),
-        old.length ? old.map(function (d) {
-          var box = h('input', { type: 'checkbox', id: 'd-' + d.id, 'aria-label': 'Select draft' });
-          box.addEventListener('change', function () { if (box.checked) picks[d.id] = 1; else delete picks[d.id]; count(); });
-          return h('div', { class: 'item row' }, box,
-            h('label', { for: 'd-' + d.id, class: 'grow' }, h('div', { class: 'subject', text: d.subject }),
-              h('div', { class: 'from', text: (d.to ? 'To ' + d.to + ' · ' : '') + when(d.date) })));
-        }) : h('p', { class: 'muted', text: 'No old drafts.' }),
-        old.length ? h('div', { class: 'row end' }, del) : null));
-  }).catch(failed);
-}
-
-/* ---------- Settings ---------- */
+/* ---------- More: outbox, settings, switch off ---------- */
 var FIELDS = [
   ['checkEveryMinutes', 'Check my inbox every (minutes)', 'select', [1, 5, 10, 15]],
+  ['dangerousToSpam', 'Send dangerous emails straight to Spam', 'bool'],
+  ['alertEmails', 'Email me if my outbox looks hacked', 'bool'],
   ['dangerousScore', 'Score for "Dangerous" (50-100)', 'number'],
   ['suspiciousScore', 'Score for "Check first" (20-90)', 'number'],
-  ['dangerousToSpam', 'Send dangerous emails straight to Spam', 'bool'],
-  ['promoDays', 'Suggest removing promotions older than (days)', 'number'],
-  ['socialDays', 'Suggest removing social alerts older than (days)', 'number'],
-  ['codeDays', 'Suggest removing login codes older than (days)', 'number'],
+  ['promoDays', 'Suggest clearing promotions older than (days)', 'number'],
+  ['socialDays', 'Suggest clearing social alerts older than (days)', 'number'],
+  ['codeDays', 'Suggest clearing login codes older than (days)', 'number'],
   ['draftDays', 'Offer to delete drafts older than (days)', 'number'],
-  ['scanYears', 'Websites list: read mail from the last (years)', 'number'],
+  ['scanYears', 'Senders list: read mail from the last (years)', 'number'],
   ['massRecipients', 'Alert me when one email I send goes to (people)', 'number'],
-  ['maxSentPerHour', 'Alert me when I send this many emails in an hour', 'number'],
-  ['alertEmails', 'Email me when my outbox looks hacked', 'bool']
+  ['maxSentPerHour', 'Alert me when I send this many emails in an hour', 'number']
 ];
-function renderSettings() {
-  loading('settings');
-  call('apiSettings').then(function (s) {
-    var inputs = {};
-    var form = h('div', { class: 'card' }, h('h2', { text: 'Settings' }), FIELDS.map(function (f) {
-      var el;
-      if (f[2] === 'select') { el = h('select', { id: 'f-' + f[0] }, f[3].map(function (v) { return h('option', { value: String(v), selected: s.settings[f[0]] === v ? 'selected' : null }, String(v)); })); }
-      else if (f[2] === 'bool') { el = h('input', { type: 'checkbox', id: 'f-' + f[0] }); el.checked = !!s.settings[f[0]]; }
-      else { el = h('input', { type: 'number', id: 'f-' + f[0], value: String(s.settings[f[0]]), style: 'width:100px', inputmode: 'numeric' }); }
-      inputs[f[0]] = { el: el, kind: f[2] };
-      return h('label', { class: 'field', for: 'f-' + f[0] }, h('span', { text: f[1] }), el);
-    }));
-    var save = h('button', { class: 'btn primary' }, 'Save settings');
-    save.addEventListener('click', function () {
-      var out = {};
-      Object.keys(inputs).forEach(function (k) {
-        var i = inputs[k];
-        out[k] = i.kind === 'bool' ? i.el.checked : Number(i.el.value);
-      });
-      act(save, call('apiSaveSettings', out), 'Saved.').catch(function () {});
-    });
-    add(form, h('div', { class: 'row end' }, save));
-    show(form, keysCard(s.keys), listCard('allow', 'Trusted senders', 'Never flagged, but dangerous attachments are still caught.', s.allow),
-      listCard('block', 'Blocked senders', 'New emails from these go straight to Trash.', s.block), offCard());
+function renderMore() {
+  loading('your outbox and settings');
+  Promise.all([call('apiOutgoing'), call('apiSettings')]).then(function (res) {
+    var o = res[0], s = res[1];
+    show(outboxCard(o), draftsCard(o), settingsCard(s), keysCard(s.keys),
+      listCard('allow', 'Trusted senders', 'Never flagged, but dangerous attachments are still caught.', s.allow),
+      listCard('block', 'Blocked senders', 'New emails from these go straight to Trash.', s.block), offCard(), helpCard());
   }).catch(failed);
+}
+function fold(title, help, body, open) {
+  return h('details', { class: 'card fold', open: open ? 'open' : null },
+    h('summary', {}, h('span', {}, h('span', { class: 'subject', text: title }), help ? h('span', { class: 'muted small', text: ' · ' + help }) : null)),
+    h('div', { class: 'body' }, body));
+}
+function outboxCard(o) {
+  var sched = o.scheduled.length ? o.scheduled.map(function (s) {
+    return h('div', { class: 'item' }, h('div', { class: 'subject', text: s.subject }), h('div', { class: 'from', text: 'To ' + s.to + ' (' + s.recipients + ' people)' }));
+  }) : h('p', { class: 'muted small', text: 'Nothing scheduled to send.' });
+  return alertsCard(o.alerts) ? [alertsCard(o.alerts), fold('Scheduled to send', '', sched, true)] :
+    fold('Outbox check: nothing unusual', '', [h('p', { class: 'muted small', text: 'Your sent mail, drafts and scheduled emails are checked for signs that someone else is using your account: mass emails, risky attachments or links.' }),
+      h('h3', { class: 'section', text: 'Scheduled to send' }), sched], false);
+}
+function draftsCard(o) {
+  var old = o.drafts.filter(function (d) { return d.old; });
+  var picks = {};
+  var del = h('button', { class: 'btn danger block', disabled: true }, 'Delete selected');
+  function count() { var n = Object.keys(picks).length; del.disabled = !n; del.textContent = n ? 'Delete ' + n + ' selected' : 'Delete selected'; }
+  del.addEventListener('click', function () {
+    var ids = Object.keys(picks);
+    confirmBox('Delete ' + ids.length + ' drafts?', 'Deleted drafts cannot be brought back.', 'Delete', true).then(function (ok) {
+      if (ok) act(del, call('apiDeleteDrafts', ids), function (n) { return n + ' drafts deleted.'; }).then(renderMore).catch(function () {});
+    });
+  });
+  return fold('Old drafts (' + old.length + ')', 'older than ' + o.draftDays + ' days', [
+    old.length ? old.map(function (d) {
+      var box = h('input', { type: 'checkbox', id: 'd-' + d.id, 'aria-label': 'Select draft' });
+      box.addEventListener('change', function () { if (box.checked) picks[d.id] = 1; else delete picks[d.id]; count(); });
+      return h('div', { class: 'item row' }, box,
+        h('label', { for: 'd-' + d.id, class: 'grow' }, h('div', { class: 'subject', text: d.subject }),
+          h('div', { class: 'from', text: (d.to ? 'To ' + d.to + ' · ' : '') + when(d.date) })));
+    }) : h('p', { class: 'muted small', text: 'No old drafts.' }),
+    old.length ? del : null], false);
+}
+function settingsCard(s) {
+  var inputs = {};
+  var rows = FIELDS.map(function (f) {
+    var el;
+    if (f[2] === 'select') { el = h('select', { id: 'f-' + f[0] }, f[3].map(function (v) { return h('option', { value: String(v), selected: s.settings[f[0]] === v ? 'selected' : null }, String(v)); })); }
+    else if (f[2] === 'bool') { el = h('input', { type: 'checkbox', id: 'f-' + f[0] }); el.checked = !!s.settings[f[0]]; }
+    else { el = h('input', { type: 'number', id: 'f-' + f[0], value: String(s.settings[f[0]]), inputmode: 'numeric' }); }
+    inputs[f[0]] = { el: el, kind: f[2] };
+    return h('label', { class: 'field', for: 'f-' + f[0] }, h('span', { text: f[1] }), el);
+  });
+  var save = h('button', { class: 'btn primary block' }, 'Save settings');
+  save.addEventListener('click', function () {
+    var out = {};
+    Object.keys(inputs).forEach(function (k) { var i = inputs[k]; out[k] = i.kind === 'bool' ? i.el.checked : Number(i.el.value); });
+    act(save, call('apiSaveSettings', out), 'Saved.').catch(function () {});
+  });
+  return fold('Settings', '', [rows, save], false);
 }
 function keysCard(keys) {
   function keyRow(which, label, help) {
@@ -407,40 +525,46 @@ function keysCard(keys) {
     var saveBtn = h('button', { class: 'btn' }, 'Save');
     saveBtn.addEventListener('click', function () {
       act(saveBtn, call('apiSetKey', which, input.value), function (m) { return m ? 'Saved: ' + m : 'Removed.'; })
-        .then(function (m) { input.value = ''; input.placeholder = m || 'Not set'; input.type = 'password'; eye.textContent = 'Show'; }).catch(function () {});
+        .then(function (m) { input.value = ''; input.placeholder = m || 'Not set'; input.type = 'password'; eye.textContent = 'Show'; eye.setAttribute('aria-pressed', 'false'); eye.setAttribute('aria-label', 'Show key'); })
+        .catch(function () {});
     });
     return h('div', { class: 'item' }, h('div', { class: 'subject', text: label }), h('p', { class: 'muted small', text: help }),
       h('div', { class: 'secret' }, input, eye, saveBtn));
   }
-  return h('div', { class: 'card' }, h('h2', { text: 'Extra checks (optional)' }),
+  return fold('Extra checks', 'optional', [
     h('p', { class: 'muted small', text: 'Free keys add a second opinion. They are stored in your Google account and never shown again. Save an empty box to remove a key.' }),
     keyRow('virustotal', 'VirusTotal key', 'Checks attachments against 70+ antivirus engines.'),
-    keyRow('safebrowsing', 'Google Safe Browsing key', "Checks links against Google's list of dangerous sites."));
+    keyRow('safebrowsing', 'Google Safe Browsing key', "Checks links against Google's list of dangerous sites.")], false);
 }
 function listCard(which, title, help, items) {
-  var input = h('input', { type: 'text', placeholder: 'name@site.com or @site.com', 'aria-label': 'Add to ' + title, class: 'grow' });
+  var input = h('input', { type: 'text', placeholder: 'name@site.com or @site.com', 'aria-label': 'Add to ' + title, class: 'grow', autocapitalize: 'none', spellcheck: 'false' });
   var addBtn = h('button', { class: 'btn' }, 'Add');
   addBtn.addEventListener('click', function () {
-    act(addBtn, call('apiUpdateList', which, 'add', input.value), 'Added.').then(renderSettings).catch(function () {});
+    act(addBtn, call('apiUpdateList', which, 'add', input.value), 'Added.').then(renderMore).catch(function () {});
   });
-  return h('div', { class: 'card' }, h('h2', { text: title }), h('p', { class: 'muted small', text: help }),
-    h('div', { class: 'row' }, input, addBtn),
+  return fold(title + ' (' + items.length + ')', '', [h('p', { class: 'muted small', text: help }), h('div', { class: 'row' }, input, addBtn),
     items.map(function (e) {
       return h('div', { class: 'item row' }, h('span', { class: 'grow from', text: e }),
-        button('Remove', '', function (b) { return act(b, call('apiUpdateList', which, 'remove', e), 'Removed.'); }, renderSettings));
-    }));
+        button('Remove', '', function (b) { return act(b, call('apiUpdateList', which, 'remove', e), 'Removed.'); }, renderMore));
+    })], false);
 }
 function offCard() {
-  var b = h('button', { class: 'btn danger' }, 'Turn protection off');
+  var b = h('button', { class: 'btn danger block' }, 'Switch protection off');
   b.addEventListener('click', function () {
-    confirmBox('Turn protection off?', 'Your inbox will no longer be checked. Run "setup" in Apps Script to switch it on again.', 'Turn off', true)
-      .then(function (ok) { if (ok) act(b, call('apiTurnOff'), 'Protection is off.').then(renderHome).catch(function () {}); });
+    confirmBox('Switch protection off?', 'Your inbox will no longer be checked. You can switch it back on from Home.', 'Switch off', true)
+      .then(function (ok) { if (ok) act(b, call('apiTurnOff'), 'Protection is off.').then(function () { go('home'); }).catch(function () {}); });
   });
-  return h('div', { class: 'card' }, h('h2', { text: 'Switch off' }), b);
+  return h('div', { class: 'card' }, b);
+}
+function helpCard() {
+  return fold('Help', '', [
+    h('p', { class: 'small', text: 'Add this page to your home screen so it opens like an app: in your browser menu, tap "Add to Home screen".' }),
+    h('p', { class: 'small', text: 'To remove EmailSpamdetection completely, switch protection off, then remove its access in your Google account.' }),
+    h('a', { class: 'btn block', href: 'https://myaccount.google.com/connections' }, 'Apps with access to your Google account')], false);
 }
 
 /* ---------- Tabs ---------- */
-var RENDER = { home: renderHome, quarantine: renderQuarantine, review: renderReview, websites: function () { renderWebsites(false); }, outbox: renderOutbox, settings: renderSettings };
+var RENDER = { home: renderHome, quarantine: renderQuarantine, review: renderReview, websites: function () { renderWebsites(false); }, more: renderMore };
 function go(tab) {
   state.tab = RENDER[tab] ? tab : 'home';
   Array.prototype.forEach.call(document.querySelectorAll('nav button'), function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-tab') === state.tab)); });

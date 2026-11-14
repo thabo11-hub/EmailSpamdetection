@@ -3,21 +3,22 @@
  *
  *  - Inbox guard: every few minutes it checks new mail for phishing, scams and dangerous
  *    attachments, and moves anything risky out of your inbox before you open it. Nothing is deleted.
- *  - Websites: lists every website and mailing list that emails you, with unsubscribe and block.
- *  - Review before removing: suggests old mail to clear out. Nothing is removed until you approve it.
+ *  - Senders: every website and mailing list that emails you, with unsubscribe and block.
+ *  - Clean up: suggests old mail to clear out. Nothing is removed until you approve it.
  *  - Outbox watch: checks sent mail, drafts and scheduled sends for signs that your account was hacked.
  *
- * Security model (SECURITY.md): it runs only as you, inside Google. There is no public server, no
- * password database and no API for anyone else to reach. The dashboard is a private web app that only
- * your Google account can open, and every dashboard call checks again that it is you.
- * Functions whose names end in "_" are private: the dashboard page cannot call them.
+ * Install from a phone: paste this one file into a new Apps Script project, deploy it as a web app,
+ * open the link and tap "Turn on protection".
  *
- * @OnlyCurrentDoc
+ * Security model (SECURITY.md): the code runs as you, inside Google, and keeps its data in your own
+ * private script storage: no spreadsheet, no server, no database. The dashboard only works when the
+ * person opening it is the Google account it runs as, and every call checks that again.
+ * Functions whose names end in "_" are private: the dashboard page cannot call them.
  */
 
 var APP_NAME = 'EmailSpamdetection';
 
-var APP_VERSION = '1.0.0';
+var APP_VERSION = '1.1.0';
 
 var LABEL_PARENT = 'EmailSpamdetection';
 
@@ -25,19 +26,9 @@ var LABEL_DANGEROUS = 'EmailSpamdetection/Dangerous';
 
 var LABEL_CHECK = 'EmailSpamdetection/Check first';
 
-var SHEET_WEBSITES = 'Websites';
-
-var SHEET_REVIEW = 'To remove';
-
-var SHEET_ACTIVITY = 'Activity';
-
-var WEBSITE_HEADERS = ['Website', 'Sender', 'Email', 'Type', 'Emails', 'Unread', 'Opened %', 'Last email', 'First seen', 'Unsubscribe', 'Status', '_meta'];
-
-var REVIEW_HEADERS = ['Key', 'What', 'Why', 'Emails', 'Oldest', 'Newest', 'Examples', 'Open in Gmail', 'Decision', 'Status'];
-
-var ACTIVITY_HEADERS = ['Time', 'Event', 'From', 'Subject', 'Score', 'Details', 'Thread'];
-
-var MAX_ACTIVITY_ROWS = 3000;
+var LOG_MAX = 150;      // activity entries kept
+var WEB_MAX = 500;      // senders kept (the ones that email you most)
+var STORE_CHUNK = 8000; // characters per stored piece (Apps Script allows 9 KB per property)
 
 var DAY_MS = 86400000;
 
@@ -60,14 +51,33 @@ var SETTING_RULES = {
   alertEmails: { type: 'bool' }
 };
 
-// Optional outside checks. The keys live in Script Properties, never in the sheet or the page.
+// Optional outside checks. The keys live in your private script storage, never on the page or in the activity log.
 var API_KEYS = { virustotal: 'key_virustotal', safebrowsing: 'key_safebrowsing' };
 
 var SCAN_QUERY = '-in:sent -in:chats -in:drafts (unsubscribe OR category:promotions OR category:social OR category:forums OR ' +
   'category:updates OR subject:(welcome OR verify OR verification OR confirm OR activate OR registration OR password OR ' +
   '"sign in" OR "sign-in" OR login OR "log in" OR receipt OR order OR invoice OR booking OR reservation OR subscription OR account))';
 
-function props_() { return PropertiesService.getScriptProperties(); }
+// Everything is stored per Google account (user properties), so two people never share data.
+function props_() { return PropertiesService.getUserProperties(); }
+
+// Bigger data (senders, clean-up list, activity) is JSON split into pieces that fit the property limit.
+function storeGet_(name, fallback) {
+  var p = props_(), n = Number(p.getProperty('s:' + name + ':n') || 0), parts = [];
+  if (!n) return fallback;
+  for (var i = 0; i < n; i++) parts.push(p.getProperty('s:' + name + ':' + i) || '');
+  try { return JSON.parse(parts.join('')); } catch (e) { return fallback; }
+}
+
+// Non-ASCII is escaped, so one character is always one byte and a piece never exceeds the limit.
+function storeSet_(name, value) {
+  var json = JSON.stringify(value).replace(/[\u007f-\uffff]/g, function (c) { return '\\u' + ('000' + c.charCodeAt(0).toString(16)).slice(-4); });
+  var p = props_(), old = Number(p.getProperty('s:' + name + ':n') || 0), n = Math.max(1, Math.ceil(json.length / STORE_CHUNK)), out = {};
+  for (var i = 0; i < n; i++) out['s:' + name + ':' + i] = json.slice(i * STORE_CHUNK, (i + 1) * STORE_CHUNK);
+  out['s:' + name + ':n'] = String(n);
+  p.setProperties(out);
+  for (var j = n; j < old; j++) p.deleteProperty('s:' + name + ':' + j);
+}
 
 function userError_(message) {
   var e = new Error(message);
@@ -118,15 +128,6 @@ function saveSettings_(input) {
   return merged;
 }
 
-// Text written to the sheet. Strips control characters, and makes a leading = + - @ plain text so
-// that a sender name such as "=IMPORTXML(...)" can never run as a formula in your sheet.
-function cell_(v) {
-  if (v === null || v === undefined) return '';
-  if (typeof v !== 'string') return v;
-  var s = v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').slice(0, 1000);
-  return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
-}
-
 function mask_(v) { return v ? String(v).slice(0, 4) + '… (' + String(v).length + ' characters)' : ''; }
 
 // Gmail searches are built only from checked addresses and domains (the Gmail version of a
@@ -139,9 +140,20 @@ function fromQuery_(entry) {
   throw userError_('That is not a valid email address or domain.');
 }
 
-function fmtDate_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy/MM/dd'); }
+function fmtDate_(d) { return Utilities.formatDate(d, timeZone_(), 'yyyy/MM/dd'); }
 
-function ownerEmail_() { return String(props_().getProperty('owner') || ''); }
+// Your time zone comes from your phone or browser when you turn protection on (see validTimeZone_).
+function timeZone_() { return props_().getProperty('tz') || Session.getScriptTimeZone(); }
+
+function validTimeZone_(tz) {
+  var s = String(tz === null || tz === undefined ? '' : tz);
+  return s.length <= 40 && /^(?:UTC|GMT|[A-Za-z]+(?:\/[A-Za-z0-9_+\-]+){1,2})$/.test(s) ? s : '';
+}
+
+// The Google account this copy runs as: the only person whose mail it touches.
+function ownerEmail_() {
+  try { return String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (e) { return ''; }
+}
 
 function gmailSearchLink_(query) {
   return 'https://mail.google.com/mail/?authuser=' + encodeURIComponent(ownerEmail_()) + '#search/' + encodeURIComponent(query);
@@ -186,7 +198,7 @@ function myAddresses_() {
 }
 
 function cachedFlag_(key, compute) {
-  var cache = CacheService.getScriptCache();
+  var cache = CacheService.getUserCache();
   var hit = cache.get(key);
   if (hit !== null && hit !== undefined) return hit === '1';
   var v = !!compute();
@@ -262,7 +274,7 @@ function assessMessage_(msg, from, lists, st) {
 }
 
 function runGuard() {
-  var lock = LockService.getScriptLock();
+  var lock = LockService.getUserLock();
   if (!lock.tryLock(5000)) return 0;
   try {
     var st = getSettings_();
@@ -467,7 +479,7 @@ function recordAlerts_(alerts, st) {
 }
 
 function runScanBatch() {
-  var lock = LockService.getScriptLock();
+  var lock = LockService.getUserLock();
   if (!lock.tryLock(5000)) return false;
   try {
     var done = scanBackfill_(Date.now() + 4 * 60000);
@@ -609,26 +621,23 @@ function websiteType_(f) {
 
 function openedPct_(r) { return r.emails ? Math.round((r.emails - r.unread) / r.emails * 100) : 0; }
 
+// Senders are stored compactly: [email, name, site, emails, unread, last, first, status, flags, hc, la, url, mailto, oneClick].
 function loadWebsites_() {
-  var sh = sheet_(SHEET_WEBSITES, WEBSITE_HEADERS);
-  var n = sh.getLastRow() - 1;
-  var values = n > 0 ? sh.getRange(2, 1, n, WEBSITE_HEADERS.length).getValues() : [];
   var t = { byEmail: {}, order: [] };
-  values.forEach(function (r) {
-    var email = String(r[2] || '').toLowerCase();
+  (storeGet_('web', []) || []).forEach(function (a) {
+    var email = String(a[0] || '').toLowerCase();
     if (!isValidEmail_(email) || t.byEmail[email]) return;
-    var meta = {};
-    try { meta = JSON.parse(r[11] || '{}'); } catch (e) { meta = {}; }
-    var rec = newRecord_(email, String(r[1] || ''), rootDomain_(email.split('@')[1]));
-    rec.emails = Number(r[4]) || 0;
-    rec.unread = Number(r[5]) || 0;
-    rec.last = r[7] instanceof Date ? r[7] : null;
-    rec.first = r[8] instanceof Date ? r[8] : null;
-    rec.status = String(r[10] || '');
-    rec.flags = { list: !!(meta.f && meta.f.list), acc: !!(meta.f && meta.f.acc), cust: !!(meta.f && meta.f.cust) };
-    rec.hc = Number(meta.hc) || 0;
-    rec.la = Number(meta.la) || 0;
-    rec.meta = { u: safeHttpsUrl_(meta.u) ? meta.u : '', m: parseMailto_(meta.m) ? meta.m : '', oc: !!meta.oc };
+    var rec = newRecord_(email, String(a[1] || ''), rootDomain_(email.split('@')[1]));
+    rec.emails = Number(a[3]) || 0;
+    rec.unread = Number(a[4]) || 0;
+    rec.last = a[5] ? new Date(Number(a[5])) : null;
+    rec.first = a[6] ? new Date(Number(a[6])) : null;
+    rec.status = String(a[7] || '');
+    var f = Number(a[8]) || 0;
+    rec.flags = { list: !!(f & 1), acc: !!(f & 2), cust: !!(f & 4) };
+    rec.hc = Number(a[9]) || 0;
+    rec.la = Number(a[10]) || 0;
+    rec.meta = { u: safeHttpsUrl_(a[11]) ? a[11] : '', m: parseMailto_(a[12]) ? a[12] : '', oc: !!a[13] };
     t.byEmail[email] = rec;
     t.order.push(rec);
   });
@@ -636,15 +645,18 @@ function loadWebsites_() {
 }
 
 function saveWebsites_(t) {
-  var sh = sheet_(SHEET_WEBSITES, WEBSITE_HEADERS);
-  var rows = t.order.slice().sort(function (a, b) { return b.emails - a.emails; }).map(function (r) {
-    return [cell_(r.site), cell_(r.name), cell_(r.email), websiteType_(r.flags), r.emails, r.unread, openedPct_(r),
-      r.last || '', r.first || '', r.meta.oc ? 'One-click' : r.meta.m ? 'By email' : r.meta.u ? 'Via link' : '',
-      cell_(r.status), JSON.stringify({ f: r.flags, hc: r.hc, la: r.la, u: r.meta.u, m: r.meta.m, oc: r.meta.oc })];
+  var rows = t.order.slice().sort(function (a, b) { return b.emails - a.emails || (b.last || 0) - (a.last || 0); }).slice(0, WEB_MAX).map(function (r) {
+    var u = r.meta.u && r.meta.u.length <= 500 ? r.meta.u : '';
+    var m = r.meta.m && r.meta.m.length <= 250 ? r.meta.m : '';
+    return [r.email, clip_(r.name, 60), r.site, r.emails, r.unread, r.last ? r.last.getTime() : 0, r.first ? r.first.getTime() : 0,
+      clip_(r.status, 80), (r.flags.list ? 1 : 0) | (r.flags.acc ? 2 : 0) | (r.flags.cust ? 4 : 0), r.hc, r.la, u, m, r.meta.oc && u ? 1 : 0];
   });
-  var old = sh.getLastRow() - 1;
-  if (old > 0) sh.getRange(2, 1, old, WEBSITE_HEADERS.length).clearContent();
-  if (rows.length) sh.getRange(2, 1, rows.length, WEBSITE_HEADERS.length).setValues(rows);
+  // Google keeps 500 KB per person for this app. If a huge mailbox would go over, keep the senders who email most.
+  for (var n = rows.length; ; n = Math.floor(n * 0.7)) {
+    try { storeSet_('web', rows.slice(0, n)); return n; } catch (e) {
+      if (n < 20 || !/quota|too large|exceed/i.test(String(e && e.message))) throw e;
+    }
+  }
 }
 
 function findWebsite_(email) {
@@ -688,7 +700,7 @@ var REVIEW_RULES = {
   'rule:big': function () { return { what: 'Big emails (10 MB or more) older than a year', why: 'They use the most storage. Look first: some hold photos or documents you want', q: 'larger:10M older_than:1y' }; }
 };
 
-// The search for a review item comes from its key, never from what the sheet says.
+// The search for a review item comes from its key, never from stored text.
 function reviewQuery_(key, st) {
   var guard = ' -is:starred -is:important -has:userlabels -in:chats';
   if (String(key).indexOf('sender:') === 0) return fromQuery_(key.slice(7)) + ' older_than:7d' + guard;
@@ -705,23 +717,38 @@ function queryStats_(q) {
 }
 
 function readReview_() {
-  var sh = sheet_(SHEET_REVIEW, REVIEW_HEADERS);
-  var n = sh.getLastRow() - 1;
-  var out = {};
-  if (n <= 0) return out;
-  sh.getRange(2, 1, n, REVIEW_HEADERS.length).getValues().forEach(function (r, i) {
-    var key = String(r[0] || '');
-    if (!key || out[key]) return;
-    out[key] = { key: key, what: String(r[1]), why: String(r[2]), count: String(r[3]), oldest: r[4], newest: r[5], examples: String(r[6]),
-      link: String(r[7]), decision: String(r[8] || ''), status: String(r[9] || ''), row: i + 2 };
+  var items = storeGet_('review', {}) || {};
+  Object.keys(items).forEach(function (k) {
+    var it = items[k];
+    it.key = k;
+    it.oldest = it.oldest ? new Date(it.oldest) : '';
+    it.newest = it.newest ? new Date(it.newest) : '';
   });
-  return out;
+  return items;
+}
+
+function writeReview_(items) {
+  var out = {};
+  Object.keys(items).slice(0, 60).forEach(function (k) {
+    var it = items[k];
+    out[k] = { what: clip_(it.what, 160), why: clip_(it.why, 240), count: String(it.count || ''), examples: clip_(it.examples, 300),
+      oldest: it.oldest instanceof Date ? it.oldest.getTime() : Number(it.oldest) || 0,
+      newest: it.newest instanceof Date ? it.newest.getTime() : Number(it.newest) || 0,
+      link: safeHttpsUrl_(it.link) ? it.link : '', decision: it.decision || '', status: clip_(it.status, 120) };
+  });
+  storeSet_('review', out);
+}
+
+function setReviewDecision_(key, decision, status) {
+  var items = readReview_();
+  if (!items[key]) throw userError_('That item is no longer in your list. Refresh the page.');
+  items[key].decision = decision;
+  items[key].status = status;
+  writeReview_(items);
 }
 
 function buildReview_(st, deadline) {
-  var sh = sheet_(SHEET_REVIEW, REVIEW_HEADERS);
-  var existing = readReview_();
-  var groups = [];
+  var existing = readReview_(), groups = [];
   loadWebsites_().order
     .filter(function (r) { return r.flags.list && r.emails >= 5 && openedPct_(r) < 20; })
     .sort(function (a, b) { return b.emails - a.emails; }).slice(0, 30)
@@ -733,31 +760,23 @@ function buildReview_(st, deadline) {
   Object.keys(existing).forEach(function (key) {   // keep anything you already decided on
     if (!groups.some(function (g) { return g.key === key; }) && existing[key].decision) groups.push({ key: key, what: existing[key].what, why: existing[key].why });
   });
-  var rows = [];
+  var out = {};
   groups.forEach(function (g) {
     var prev = existing[g.key];
-    if (Date.now() > deadline) { if (prev) rows.push([g.key, prev.what, prev.why, prev.count, prev.oldest, prev.newest, prev.examples, prev.link, prev.decision, prev.status]); return; }
-    var q = reviewQuery_(g.key, st);
-    var s = queryStats_(q);
+    if (Date.now() > deadline) { if (prev) out[g.key] = prev; return; }
+    var q = reviewQuery_(g.key, st), s = queryStats_(q);
     if (!s.count && !(prev && prev.decision)) return;
-    rows.push([cell_(g.key), cell_(g.what), cell_(g.why), s.countText, s.oldest, s.newest, cell_(s.examples.join(' | ')), gmailSearchLink_(q),
-      prev ? prev.decision : '', prev ? prev.status : '']);
+    out[g.key] = { what: g.what, why: g.why, count: s.countText, oldest: s.oldest, newest: s.newest, examples: s.examples.join(' | '),
+      link: gmailSearchLink_(q), decision: prev ? prev.decision : '', status: prev ? prev.status : '' };
   });
-  var old = sh.getLastRow() - 1;
-  if (old > 0) sh.getRange(2, 1, old, REVIEW_HEADERS.length).clearContent();
-  if (rows.length) sh.getRange(2, 1, rows.length, REVIEW_HEADERS.length).setValues(rows);
-}
-
-function setReviewCells_(key, decision, status) {
-  var item = readReview_()[key];
-  if (!item) throw userError_('That item is no longer in your review list. Refresh the page.');
-  var sh = sheet_(SHEET_REVIEW, REVIEW_HEADERS);
-  sh.getRange(item.row, 9, 1, 2).setValues([[decision, cell_(status)]]);
+  writeReview_(out);
 }
 
 function ensureReviewItem_(key, what, why) {
-  if (readReview_()[key]) return;
-  sheet_(SHEET_REVIEW, REVIEW_HEADERS).appendRow([cell_(key), cell_(what), cell_(why), '', '', '', '', '', '', '']);
+  var items = readReview_();
+  if (items[key]) return;
+  items[key] = { what: what, why: why, count: '', examples: '', oldest: 0, newest: 0, link: '', decision: '', status: '' };
+  writeReview_(items);
 }
 
 // Moves to Trash only what you approved ("Remove"), in batches, until the time runs out.
@@ -768,7 +787,7 @@ function applyApprovedRemovals_(deadline, onlyKey) {
     if (onlyKey && key !== onlyKey) return;
     if (it.decision !== 'Remove' || /^Removed/.test(it.status) || Date.now() > deadline) return;
     var q;
-    try { q = reviewQuery_(key, st); } catch (e) { setReviewCells_(key, it.decision, 'Skipped: unknown item'); return; }
+    try { q = reviewQuery_(key, st); } catch (e) { setReviewDecision_(key, it.decision, 'Skipped: unknown item'); return; }
     var removed = Number((/(\d+)/.exec(it.status) || [0, 0])[1]) || 0, finished = false;
     while (Date.now() < deadline) {
       var batch = GmailApp.search(q, 0, 100);
@@ -776,65 +795,40 @@ function applyApprovedRemovals_(deadline, onlyKey) {
       GmailApp.moveThreadsToTrash(batch);
       removed += batch.length; total += batch.length;
     }
-    setReviewCells_(key, it.decision, (finished ? 'Removed ' : 'Removing... ') + removed + ' so far, ' + fmtDate_(new Date()));
+    setReviewDecision_(key, it.decision, finished ? 'Removed ' + removed + ' emails on ' + fmtDate_(new Date()) : 'Removing... ' + removed + ' so far');
     log_(finished ? 'Removed after your approval' : 'Removing after your approval', '', '', '', clip_(it.what, 120) + ': ' + removed + ' emails moved to Trash (restorable for 30 days)');
   });
   return total;
 }
 
-function spreadsheet_() {
-  var ss = SpreadsheetApp.getActive();
-  if (!ss) throw userError_('Open this from the Apps Script project inside your EmailSpamdetection sheet.');
-  return ss;
-}
-
-function sheet_(name, headers) {
-  var ss = spreadsheet_();
-  var sh = ss.getSheetByName(name);
-  if (!sh) {
-    sh = ss.insertSheet(name);
-    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
-    sh.setFrozenRows(1);
-    if (headers[headers.length - 1] === '_meta') sh.hideColumns(headers.length);
-  }
-  return sh;
-}
-
 function log_(event, from, subject, score, details, threadId) {
   try {
-    var sh = sheet_(SHEET_ACTIVITY, ACTIVITY_HEADERS);
-    sh.appendRow([new Date(), cell_(event), cell_(from), cell_(clip_(subject, 200)), score === '' || score === undefined ? '' : Number(score) || 0,
-      cell_(clip_(details, 500)), cell_(threadId || '')]);
-    var extra = sh.getLastRow() - 1 - MAX_ACTIVITY_ROWS;
-    if (extra > 100) sh.deleteRows(2, extra);
+    var list = storeGet_('log', []) || [];
+    list.unshift([Date.now(), clip_(event, 80), clip_(from, 120), clip_(subject, 140), score === '' || score === undefined ? '' : Number(score) || 0,
+      clip_(details, 400), String(threadId || '').slice(0, 30)]);
+    storeSet_('log', list.slice(0, LOG_MAX));
   } catch (e) {
     console.error('Activity log failed: ' + e.message);
   }
 }
 
 function recentActivity_(n) {
-  var sh = sheet_(SHEET_ACTIVITY, ACTIVITY_HEADERS);
-  var last = sh.getLastRow();
-  if (last < 2) return [];
-  var count = Math.min(n, last - 1);
-  return sh.getRange(last - count + 1, 1, count, ACTIVITY_HEADERS.length).getValues().reverse().map(function (r) {
-    return { at: r[0] instanceof Date ? r[0].getTime() : 0, event: String(r[1]), from: String(r[2]), subject: String(r[3]), score: r[4], details: String(r[5]), thread: String(r[6]) };
+  return (storeGet_('log', []) || []).slice(0, n).map(function (r) {
+    return { at: r[0], event: r[1], from: r[2], subject: r[3], score: r[4], details: r[5], thread: r[6] };
   });
 }
 
-/** Run this once from the Apps Script editor. Safe to run again. */
-function setup() {
-  var p = props_();
-  var me = String(Session.getEffectiveUser().getEmail() || '').toLowerCase();
-  if (!me) throw new Error('Could not read your Google account address. Run setup from the Apps Script editor.');
+/** Optional: run from the Apps Script editor. The dashboard's "Turn on protection" button does the same. */
+function setup() { requireUser_(); return turnOn_(); }
+
+function turnOn_(tz) {
+  var p = props_(), me = ownerEmail_();
+  if (!me) throw userError_('Could not read your Google account. Open the app from its web app link.');
   var owner = p.getProperty('owner');
-  if (owner && owner !== me) throw new Error('This copy is already set up for another Google account.');
+  if (owner && owner !== me) throw userError_('This copy belongs to another Google account.');
   p.setProperty('owner', me);
+  if (validTimeZone_(tz)) p.setProperty('tz', validTimeZone_(tz));
   MY_ADDRESSES_ = null;
-  spreadsheet_();
-  [SHEET_WEBSITES, SHEET_REVIEW, SHEET_ACTIVITY].forEach(function (name) {
-    sheet_(name, name === SHEET_WEBSITES ? WEBSITE_HEADERS : name === SHEET_REVIEW ? REVIEW_HEADERS : ACTIVITY_HEADERS);
-  });
   label_(LABEL_PARENT); label_(LABEL_DANGEROUS); label_(LABEL_CHECK);
   if (!p.getProperty('scanT0')) {
     var now = String(Date.now());
@@ -843,17 +837,17 @@ function setup() {
   installTriggers_(getSettings_());
   log_('Protection switched on', me, '', '', 'Checks every ' + getSettings_().checkEveryMinutes + ' minutes');
   runGuard();
-  return 'Done. Next: Deploy > New deployment > Web app (Execute as: Me, Who has access: Only myself).';
+  return 'Protection is on.';
 }
 
 /** Switches all automatic checks off. Your settings and lists stay. */
 function turnOff() {
-  requireOwner_();
+  requireUser_();
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (TRIGGER_HANDLERS.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   log_('Protection switched off', ownerEmail_(), '', '', 'All automatic checks stopped');
-  return 'Protection is off. Run setup to switch it on again.';
+  return 'Protection is off.';
 }
 
 function installTriggers_(st) {
@@ -861,7 +855,8 @@ function installTriggers_(st) {
     if (TRIGGER_HANDLERS.indexOf(t.getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('runGuard').timeBased().everyMinutes(st.checkEveryMinutes).create();
-  ScriptApp.newTrigger('runNightly').timeBased().everyDays(1).atHour(2).create();
+  try { ScriptApp.newTrigger('runNightly').timeBased().everyDays(1).atHour(2).inTimezone(timeZone_()).create(); }
+  catch (e) { ScriptApp.newTrigger('runNightly').timeBased().everyDays(1).atHour(2).create(); }
   if (props_().getProperty('scanDone') !== '1') ScriptApp.newTrigger('runScanBatch').timeBased().everyMinutes(10).create();
 }
 
@@ -876,7 +871,7 @@ function protectionOn_() {
 function label_(name) { return GmailApp.getUserLabelByName(name) || GmailApp.createLabel(name); }
 
 function runNightly() {
-  var lock = LockService.getScriptLock();
+  var lock = LockService.getUserLock();
   if (!lock.tryLock(30000)) return false;
   try {
     var st = getSettings_(), end = Date.now() + 5 * 60000;
@@ -898,29 +893,57 @@ function runNightly() {
 // and there is no doPost, so the only way in is the page's own google.script.run calls below.
 function doGet() {
   try {
-    requireOwner_();
+    requireUser_();
   } catch (e) {
-    return HtmlService.createHtmlOutput('<p style="font-family:sans-serif">Not allowed.</p>').setTitle(APP_NAME);
+    var url = authUrl_();
+    var msg = url ? '<p>Google needs your permission before this app can open.</p><p><a href="' + htmlEscape_(url) +
+      '" target="_top">Give permission</a>, tap Select all, then open your app link again.</p>' : '<p>Not allowed. Open your own copy of EmailSpamdetection.</p>';
+    return HtmlService.createHtmlOutput('<div style="font:17px/1.5 sans-serif;padding:18px">' + msg + '</div>')
+      .setTitle(APP_NAME).addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
-  return HtmlService.createHtmlOutputFromFile('Dashboard')
+  return dashboardOutput_()
     .setTitle(APP_NAME)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
-function requireOwner_() {
-  var owner = ownerEmail_();
-  var active = '';
+// If Google has not been given every permission yet (on a phone it is easy to untick one), this is the
+// link that asks again. Only a Google sign-in address is ever returned.
+function authUrl_() {
+  try {
+    var info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+    if (info.getAuthorizationStatus() !== ScriptApp.AuthorizationStatus.REQUIRED) return '';
+    var url = String(info.getAuthorizationUrl() || '');
+    return safeHttpsUrl_(url) && /^https:\/\/(accounts\.google\.com|script\.google\.com)\//.test(url) ? url : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function htmlEscape_(v) {
+  return String(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+}
+
+// The one-file install carries the page inside the script (DASHBOARD_HTML); the repo version uses Dashboard.html.
+function dashboardOutput_() {
+  return typeof DASHBOARD_HTML === 'string' ? HtmlService.createHtmlOutput(DASHBOARD_HTML) : HtmlService.createHtmlOutputFromFile('Dashboard');
+}
+
+// The dashboard works only for the Google account this copy runs as. If a copy were ever deployed as
+// "Execute as: Me" but opened by someone else, the two accounts differ and every call is refused.
+function requireUser_() {
+  var active = '', me = ownerEmail_();
   try { active = String(Session.getActiveUser().getEmail() || '').toLowerCase(); } catch (e) { active = ''; }
-  if (!owner || !active || active !== owner) {
-    log_('Access denied', active || 'unknown user', '', '', 'Someone who is not the owner tried to use the dashboard');
+  var owner = props_().getProperty('owner');
+  if (!active || !me || active !== me || (owner && owner !== me)) {
+    log_('Access denied', active || 'unknown user', '', '', 'Someone other than the owner tried to use the dashboard');
     throw userError_('Not allowed.');
   }
-  return owner;
+  return me;
 }
 
 function rateLimit_(bucket, max, windowSec) {
-  var cache = CacheService.getScriptCache();
+  var cache = CacheService.getUserCache();
   var key = 'rl:' + bucket + ':' + Math.floor(Date.now() / 1000 / windowSec);
   var n = Number(cache.get(key) || 0) + 1;
   cache.put(key, String(n), windowSec + 5);
@@ -933,15 +956,21 @@ function rateLimit_(bucket, max, windowSec) {
 // Every API call: owner check, rate limit, and errors without stack traces.
 function guarded_(fn, bucket, max, windowSec) {
   try {
-    requireOwner_();
+    requireUser_();
     rateLimit_('api', 120, 60);
     if (bucket) rateLimit_(bucket, max, windowSec);
     return { ok: true, data: fn() };
   } catch (e) {
     if (e && e.isUserError) return { ok: false, error: e.message };
-    console.error(e && e.stack ? e.stack : String(e));
-    log_('Error', '', '', '', clip_(e && e.message, 300));
-    return { ok: false, error: 'Something went wrong. Details are in the Activity tab of your sheet.' };
+    var msg = String((e && e.message) || e);
+    if (/permission|authori[sz]|required scopes?/i.test(msg)) {
+      var url = authUrl_();
+      return { ok: false, authUrl: url, error: url ? 'Google needs your permission for this. Tap "Give permission", choose Select all, then come back.' :
+        'Google has not given this app permission yet. In the Apps Script editor, pick "setup", tap Run and allow everything.' };
+    }
+    console.error(e && e.stack ? e.stack : msg);
+    log_('Error', '', '', '', clip_(msg, 300));
+    return { ok: false, error: 'Something went wrong. Try again in a minute. Details are under Recent activity on Home.' };
   }
 }
 
@@ -954,17 +983,17 @@ function apiOverview() {
   return guarded_(function () {
     var st = getSettings_(), p = props_();
     var since = Date.now() - 7 * DAY_MS;
-    var acts = recentActivity_(400);
+    var acts = recentActivity_(LOG_MAX);
     var review = readReview_();
     return {
-      version: APP_VERSION, owner: ownerEmail_(), protectionOn: protectionOn_(), checkEveryMinutes: st.checkEveryMinutes,
-      lastCheck: Number(p.getProperty('guardLast') || 0),
+      version: APP_VERSION, owner: ownerEmail_(), setupDone: !!p.getProperty('owner'), protectionOn: protectionOn_(),
+      checkEveryMinutes: st.checkEveryMinutes, lastCheck: Number(p.getProperty('guardLast') || 0),
       dangerous: labelThreads_(LABEL_DANGEROUS, 100).length, checkFirst: labelThreads_(LABEL_CHECK, 100).length,
       caughtThisWeek: acts.filter(function (a) { return a.at > since && /^(Dangerous|Check first)/.test(a.event); }).length,
       toReview: Object.keys(review).filter(function (k) { return !review[k].decision; }).length,
       websites: loadWebsites_().order.length,
       scanDone: p.getProperty('scanDone') === '1', scanCursor: Number(p.getProperty('scanCursor') || 0),
-      alerts: getAlerts_()
+      alerts: getAlerts_(), activity: acts.slice(0, 12)
     };
   });
 }
@@ -1030,13 +1059,13 @@ function apiReviewDecision(key, decision) {
     if (!readReview_()[k]) throw userError_('That item is no longer in your review list. Refresh the page.');
     reviewQuery_(k, getSettings_());   // throws for anything that is not a known kind of item
     if (decision === 'remove') {
-      setReviewCells_(k, 'Remove', 'Approved by you');
+      setReviewDecision_(k, 'Remove', 'Approved by you');
       applyApprovedRemovals_(Date.now() + 25000, k);
     } else if (decision === 'keep') {
-      setReviewCells_(k, 'Keep', 'Kept');
+      setReviewDecision_(k, 'Keep', 'Kept');
     } else if (decision === 'undo') {
       var st = readReview_()[k].status;
-      setReviewCells_(k, '', /^Removing/.test(st) ? 'Stopped: ' + st : '');
+      setReviewDecision_(k, '', /^Removing/.test(st) ? 'Stopped: ' + st : '');
     } else {
       throw userError_('Unknown decision.');
     }
@@ -1079,7 +1108,7 @@ function apiWebsiteAction(email, action) {
       if (action === 'block') updateList_('block', 'add', rec.email);
       var key = 'sender:' + rec.email;
       ensureReviewItem_(key, 'Emails from ' + (rec.name || rec.email) + ' (' + rec.email + ')', action === 'block' ? 'You blocked this sender' : 'You chose to remove these');
-      setReviewCells_(key, 'Remove', 'Approved by you');
+      setReviewDecision_(key, 'Remove', 'Approved by you');
       applyApprovedRemovals_(Date.now() + 20000, key);
       rec.status = (action === 'block' ? 'Blocked' : 'Old emails removed') + ' ' + fmtDate_(new Date());
     } else {
@@ -1170,7 +1199,7 @@ function apiUpdateList(which, op, value) {
 
 function apiCheckNow() {
   return guarded_(function () {
-    var lock = LockService.getScriptLock();
+    var lock = LockService.getUserLock();
     if (!lock.tryLock(10000)) throw userError_('A check is already running. Try again in a minute.');
     try {
       var r = guardThreads_(GmailApp.search('in:inbox newer_than:30d', 0, 150), 0, getSettings_(), Date.now() + 4 * 60000);
@@ -1182,3 +1211,5 @@ function apiCheckNow() {
 }
 
 function apiTurnOff() { return guarded_(function () { return turnOff(); }, 'settings', 5, 60); }
+
+function apiTurnOn(timeZone) { return guarded_(function () { return turnOn_(timeZone); }, 'settings', 5, 60); }

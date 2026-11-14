@@ -12,7 +12,7 @@ header.top { background: var(--card); border-bottom: 1px solid var(--line); }
 header.top .wrap { display: flex; align-items: center; gap: 12px; padding-top: 12px; padding-bottom: 12px; }
 .brand { font-weight: 700; text-decoration: none; color: var(--ink); flex: 1; }
 .wrap { max-width: 860px; margin: 0 auto; padding: 0 18px; }
-.hero { padding: 40px 0 24px; }
+.hero { padding: 28px 0 18px; }
 .hero h1 { font-size: clamp(28px, 6vw, 42px); line-height: 1.15; margin: 0 0 12px; }
 .hero p { font-size: 18px; color: var(--muted); margin: 0 0 20px; max-width: 640px; }
 .btn { display: inline-block; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 11px 16px;
@@ -39,3 +39,20 @@ details summary { cursor: pointer; color: var(--muted); }
 .verdict.dangerous { color: var(--danger); } .verdict.suspicious { color: var(--warn); } .verdict.clean { color: var(--ok); }
 ul.reasons { margin: 8px 0 0; padding-left: 20px; }
 .hidden { display: none; }
+.muted { color: var(--muted); }
+.btn.block { display: block; width: 100%; text-align: center; }
+.btn.big { padding: 15px 18px; font-size: 18px; border-radius: 14px; }
+ol.setup { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 12px; }
+.step h2 { display: flex; align-items: center; gap: 10px; font-size: 21px; margin: 0 0 8px; }
+.step .num { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: none; border-radius: 50%;
+             background: var(--accent); color: var(--accent-ink); font-size: 17px; }
+.step p { margin: 0 0 12px; }
+ol.taps { margin: 14px 0 0; padding-left: 22px; } ol.taps li { margin-bottom: 8px; }
+.okmsg { margin: 10px 0 0 !important; padding: 10px 12px; border-radius: 10px; background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+.tip { margin: 8px 0 0 !important; font-size: 15px; color: var(--muted); }
+details.fold { margin: 0 0 14px; }
+details.fold summary { font-weight: 600; color: var(--ink); padding: 2px 0; }
+dl.fixes dt { font-weight: 600; margin-top: 12px; } dl.fixes dd { margin: 4px 0 0; color: var(--muted); }
+ul.plain { padding-left: 20px; } ul.plain li { margin-bottom: 8px; }
+#appcode { margin-top: 12px; min-height: 220px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; }
+section.card { margin: 6px 0 14px; } section.card h2 { margin-top: 0; }

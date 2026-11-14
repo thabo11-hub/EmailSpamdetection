@@ -18,7 +18,7 @@ test('setup, scan, nightly and every dashboard call work end to end', () => {
     plain: 'Click here to verify your account within 24 hours', headers: { 'Authentication-Results': 'dmarc=fail' } }));
   env.addDraft(makeMessage({ from: OWNER, subject: 'old CV', date: ago(800) }), 'r9');
 
-  assert.match(app.setup(), /Deploy/);
+  assert.match(app.setup(), /Protection is on/);
   assert.deepEqual(env.triggers.map((t) => t.getHandlerFunction()).sort(), ['runGuard', 'runNightly', 'runScanBatch']);
   assert.ok(env.labels.has('EmailSpamdetection/Dangerous') && env.labels.has('EmailSpamdetection/Check first'));
   assert.ok(env.threads.find((t) => /limited/.test(t.getFirstMessageSubject())).labels.has('EmailSpamdetection/Dangerous'), 'setup runs a first check');
@@ -49,6 +49,9 @@ test('setup, scan, nightly and every dashboard call work end to end', () => {
   assert.match(q.dangerous[0].reasons, /imitates PayPal|PayPal/);
   assert.equal(app.apiQuarantineAction(q.dangerous[0].id, 'restore', true).ok, true);
   assert.ok(app.getLists_().allow.includes('service@paypa1.com'));
+  const overview = app.apiOverview().data;
+  assert.ok(overview.activity.some((a) => a.event === 'Protection switched on'), 'Home shows recent activity');
   assert.equal(app.apiTurnOff().ok, true);
   assert.equal(env.triggers.length, 0);
+  assert.equal(env.scriptProps.size, 0, 'everything is kept in your own user storage');
 });

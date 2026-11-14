@@ -8,11 +8,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 P = '<img src=x onerror="window.__xss=1">"><script>window.__xss=2</script><svg onload="window.__xss=3"></svg>'
 STUB = r"""
 window.__xss = 0;
+window.__calls = [];
 const P = %s;
 const now = Date.now();
+const off = location.hash === '#off', fail = location.hash === '#fail' || location.hash === '#badfail';
 const data = {
-  apiOverview: { version: P, owner: P, protectionOn: true, checkEveryMinutes: 5, lastCheck: now, dangerous: 1, checkFirst: 1, caughtThisWeek: 2,
-                 toReview: 1, websites: 1, scanDone: false, scanCursor: now, alerts: [{ at: now, kind: P, detail: P }] },
+  apiOverview: { version: P, owner: P, protectionOn: !off, setupDone: false, checkEveryMinutes: 5, lastCheck: now, dangerous: 1, checkFirst: 1, caughtThisWeek: 2,
+                 toReview: 1, websites: 1, scanDone: false, scanCursor: now, alerts: [{ at: now, kind: P, detail: P }],
+                 activity: [{ at: now, event: P, from: P, subject: P, details: P }] },
   apiQuarantine: { dangerous: [{ id: 'abc123def456', level: 'dangerous', from: P, subject: P, date: now, reasons: P + '; ' + P }], check: [] },
   apiReview: [{ key: 'sender:a@b.com', what: P, why: P, count: '5', examples: P, oldest: now, newest: now, link: 'javascript:window.__xss=4', decision: '', status: P }],
   apiWebsites: [{ site: P, name: P, email: 'a@b.com', type: 'Mailing list', emails: 9, opened: 0, last: now, unsub: 'link', status: P, suggestion: P }],
@@ -27,7 +30,12 @@ function runner(ok) {
   return new Proxy({}, { get(_, name) {
     if (name === 'withSuccessHandler') return (f) => runner(f);
     if (name === 'withFailureHandler') return () => runner(ok);
-    return () => setTimeout(() => ok({ ok: true, data: data[name] !== undefined ? data[name] : true }), 0);
+    return (...args) => {
+      window.__calls.push([name, args]);
+      const authUrl = location.hash === '#badfail' ? 'javascript:window.__xss=6' : 'https://accounts.google.com/o/oauth2/auth?x=1';
+      const res = fail && name === 'apiReview' ? { ok: false, error: P, authUrl } : { ok: true, data: data[name] !== undefined ? data[name] : true };
+      setTimeout(() => ok(res), 0);
+    };
   } });
 }
 window.google = { script: { run: runner(() => {}) } };
@@ -59,16 +67,23 @@ with sync_playwright() as p:
     page.add_init_script(STUB)
     page.goto((ROOT / 'src' / 'Dashboard.html').as_uri())
     page.wait_for_timeout(300)
-    for tab in ['home', 'quarantine', 'review', 'websites', 'outbox', 'settings']:
+    for tab in ['home', 'quarantine', 'review', 'websites', 'more']:
         page.click(f'nav button[data-tab="{tab}"]')
         page.wait_for_timeout(250)
         if tab == 'websites':
-            page.click('text=All')
+            page.click('main .chips button:has-text("All")')
             page.wait_for_timeout(150)
+            page.click('main button:has-text("More options")')
+            check(page.is_visible('main button:has-text("Block")'), 'senders: More options shows Block and Remove')
             page.click('main button:has-text("Unsubscribe")')
             page.wait_for_timeout(250)
+        if tab == 'more':
+            for summary in page.locator('main details > summary').all():
+                summary.click()
+            page.wait_for_timeout(100)
         page_safe(page, 'dashboard/' + tab)
         check('<img src=x onerror=' in page.inner_text('main'), f'dashboard/{tab}: attack text is shown as plain text')
+    check(page.is_visible('#badge-quarantine') and page.inner_text('#badge-quarantine') == '1', 'tabs: Held back shows how many are held back')
     # show/hide toggle on the secret key field
     key = page.locator('input[aria-label="VirusTotal key"]')
     check(key.get_attribute('type') == 'password', 'settings: API key field is hidden by default')
@@ -77,6 +92,35 @@ with sync_playwright() as p:
     page.click('button[aria-label="Hide key"] >> nth=0')
     check(key.get_attribute('type') == 'password', 'settings: Hide masks it again')
     check(not dialogs, 'dashboard: no alert/confirm dialogs were triggered')
+
+    # First run: one big button turns protection on and sends the phone's time zone.
+    page = browser.new_page(timezone_id='Africa/Johannesburg')
+    page.add_init_script(STUB)
+    page.goto((ROOT / 'src' / 'Dashboard.html').as_uri() + '#off')
+    page.wait_for_timeout(300)
+    btn = page.locator('main button:has-text("Turn on protection")')
+    check(btn.count() == 1, 'first run: a single "Turn on protection" button')
+    btn.click()
+    page.wait_for_timeout(300)
+    calls = page.evaluate('window.__calls')
+    check(['apiTurnOn', ['Africa/Johannesburg']] in calls, 'first run: turning on sends the phone time zone')
+    page_safe(page, 'dashboard/first-run')
+
+    # Missing permission: a banner with a Google link only; error text stays plain text.
+    for mode, want_link in (('#fail', True), ('#badfail', False)):
+        page = browser.new_page()
+        page.add_init_script(STUB)
+        page.goto((ROOT / 'src' / 'Dashboard.html').as_uri() + mode)
+        page.wait_for_timeout(200)
+        page.click('nav button[data-tab="review"]')
+        page.wait_for_timeout(250)
+        links = page.evaluate("Array.from(document.querySelectorAll('#banner a[href]')).map(a => a.href)")
+        if want_link:
+            check(links == ['https://accounts.google.com/o/oauth2/auth?x=1'], 'permission: banner links to Google sign-in')
+        else:
+            check(links == [] and page.is_hidden('#banner'), 'permission: an unsafe link is never shown')
+        check('<img src=x onerror=' in page.inner_text('main'), 'permission: the error is shown as plain text')
+        check(page.evaluate('window.__xss') == 0, f'permission{mode}: no injected code ran')
 
     # The public site, served with the exact headers from vercel.json (minus upgrade-insecure-requests,
     # which would push this local http test server to https).
@@ -98,9 +142,19 @@ with sync_playwright() as p:
         console = []
         page.on('console', lambda m: console.append(m.text) if m.type == 'error' else None)
         page.on('dialog', lambda d: (dialogs.append(d.message), d.dismiss()))
-        page.add_init_script('window.__xss = 0;')
+        page.add_init_script('''window.__xss = 0;
+          if (navigator.clipboard) { const w = navigator.clipboard.writeText.bind(navigator.clipboard);
+            navigator.clipboard.writeText = (t) => { window.__copied = t; return w(t).catch(() => {}); }; }''')
         page.goto(base + '/index.html')
         check(not [c for c in console if 'Content Security Policy' in c], 'site: home page loads with no security-policy errors')
+        app_txt = (ROOT / 'public' / 'app.txt').read_text()
+        check(page.input_value('#appcode') == app_txt, 'site: the code behind the Copy button is exactly app.txt')
+        page.context.grant_permissions(['clipboard-write'])
+        page.click('#copy')
+        page.wait_for_timeout(300)
+        check(page.is_visible('#copied'), 'site: Copy shows "Copied"')
+        check(page.evaluate('window.__copied') == app_txt, 'site: Copy puts the whole app on the clipboard')
+        check(page.get_attribute('a:has-text("Open Google Apps Script")', 'href') == 'https://script.google.com/home/projects/create', 'site: step 2 opens Apps Script')
         page.goto(base + '/check.html')
         page.fill('#from', P)
         page.fill('#subject', P)

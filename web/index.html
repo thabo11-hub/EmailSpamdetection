@@ -3,40 +3,89 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EmailSpamdetection: keep phishing and junk out of your Gmail</title>
-<meta name="description" content="Catches phishing, scams and dangerous attachments before you open them, lists every website that emails you, and cleans up old mail only after you approve. Runs inside your own Google account.">
+<title>EmailSpamdetection: protect your Gmail from your phone</title>
+<meta name="description" content="Holds back phishing, scams and dangerous attachments before you open them, shows every website that emails you, and clears old mail only after you approve. Free, set up from your phone in 3 steps, runs inside your own Google account.">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 <header class="top"><div class="wrap"><a class="brand" href="/">EmailSpamdetection</a><a href="/check">Check an email</a></div></header>
 <main class="wrap">
   <section class="hero">
-    <h1>Keep phishing, scams and junk out of your Gmail.</h1>
-    <p>EmailSpamdetection runs inside your own Google account. It moves risky emails out of your inbox before you open them, and nothing is ever deleted without you.</p>
-    <div class="row"><a class="btn primary" href="/check">Check a suspicious email now</a><a class="btn" href="#install">Set it up</a></div>
+    <h1>Protect your Gmail in 3 steps, right from your phone.</h1>
+    <p>Holds back scams and dangerous attachments before you open them. Free, and it runs inside your own Google account.</p>
   </section>
 
+  <ol class="setup" id="setup">
+    <li class="card step">
+      <h2><span class="num" aria-hidden="true">1</span>Copy the app</h2>
+      <p>One tap copies the whole app.</p>
+      <button id="copy" class="btn primary big block" type="button">Copy the app</button>
+      <p id="copied" class="okmsg" role="status" hidden>Copied. Now do step 2.</p>
+    </li>
+    <li class="card step">
+      <h2><span class="num" aria-hidden="true">2</span>Paste it into Google</h2>
+      <a class="btn primary big block" href="https://script.google.com/home/projects/create" target="_blank" rel="noopener noreferrer">Open Google Apps Script</a>
+      <ol class="taps">
+        <li>Sign in with the Gmail you want to protect.</li>
+        <li>Press and hold on the code that's there, tap <b>Select all</b>, then <b>Paste</b>. Only the app should be left.</li>
+        <li>Tap the <b>Save</b> icon.</li>
+      </ol>
+    </li>
+    <li class="card step">
+      <h2><span class="num" aria-hidden="true">3</span>Deploy and switch it on</h2>
+      <ol class="taps">
+        <li>Tap <b>Deploy</b>, then <b>New deployment</b>, the gear icon, <b>Web app</b> and <b>Deploy</b>. Leave "Only myself" as it is.</li>
+        <li>Tap <b>Authorize access</b> and pick your account. Google warns that it hasn't checked this app, because it's your own private copy: tap <b>Advanced</b>, then <b>Go to Untitled project</b>, then <b>Select all</b> and <b>Continue</b>. Google lists full Gmail access because the app reads and sorts your mail; it never deletes anything without your tap.</li>
+        <li>Tap the <b>Web app</b> link, then <b>Turn on protection</b>. Done.</li>
+      </ol>
+      <p class="tip">Tip: on your app page, use your browser's <b>Add to Home screen</b> so it opens like an app.</p>
+    </li>
+  </ol>
+
+  <details class="card fold">
+    <summary>Stuck? Quick fixes</summary>
+    <dl class="fixes">
+      <dt>The Google page is tiny or hard to tap</dt>
+      <dd>Open your browser menu and tick <b>Desktop site</b>, then try again.</dd>
+      <dt>"Script function not found: doGet"</dt>
+      <dd>The code was pasted inside the old text. In the editor, Select all, Paste again and Save. Then tap Deploy, Manage deployments, the pencil, Version: New version, Deploy.</dd>
+      <dt>"Sorry, unable to open the file at this time"</dt>
+      <dd>You're signed in to more than one Google account. Open your app link in a private (incognito) tab and sign in with only this Gmail.</dd>
+      <dt>The app says Google needs your permission</dt>
+      <dd>Tap <b>Give permission</b> and choose <b>Select all</b>. The app needs Gmail access to check your mail.</dd>
+    </dl>
+  </details>
+
+  <section class="card">
+    <h2>No setup: check one email now</h2>
+    <p class="muted">Paste a suspicious email and see if it's a scam. Nothing you paste leaves your phone.</p>
+    <a class="btn big block" href="/check">Check an email</a>
+  </section>
+
+  <h2>What it does</h2>
   <div class="grid">
     <div class="card"><h3>Stops risky mail first</h3><p>Every few minutes it checks new mail for fake senders, look-alike websites and dangerous attachments, and moves those emails out of your inbox.</p></div>
-    <div class="card"><h3>Shows who emails you</h3><p>A list of every website and mailing list you're signed up to, how often you open them, and a one-tap unsubscribe or block.</p></div>
+    <div class="card"><h3>Shows who emails you</h3><p>Every website and mailing list you're signed up to, how often you open them, and one-tap unsubscribe or block.</p></div>
     <div class="card"><h3>Review before removing</h3><p>It suggests old mail to clear out: expired promotions, old login codes, big attachments. You decide, and removed mail stays in Trash for 30 days.</p></div>
     <div class="card"><h3>Watches your outbox</h3><p>If your sent mail, drafts or scheduled emails suddenly look like someone else is using your account, it tells you right away.</p></div>
   </div>
 
   <h2>Why it's safe</h2>
-  <p>Most inbox cleaners ask you to hand a company the keys to your email. This one doesn't: it runs in your own Google account, as you. There is no server that stores your email, no password database to steal and no public page that can reach your mail. Your dashboard is a private page that only your Google account can open.</p>
+  <ul class="plain">
+    <li>Your copy runs inside your own Google account, as you. There's no company server, no password to steal and no database.</li>
+    <li>Your app link only opens for your Google account.</li>
+    <li>Nothing is deleted without your tap, and removed mail stays in Trash for 30 days.</li>
+    <li>Switch it off any time under More, or remove its access in <a href="https://myaccount.google.com/connections" rel="noopener noreferrer">your Google account</a>.</li>
+    <li>The code is open: <a href="https://github.com/thabo11-hub/EmailSpamdetection" rel="noopener noreferrer">read it on GitHub</a> or look at exactly what you copy below.</li>
+  </ul>
 
-  <h2 id="install">Set it up (about 5 minutes, on a computer)</h2>
-  <ol class="steps">
-    <li>Create a new Google Sheet and name it <strong>EmailSpamdetection</strong>.</li>
-    <li>In the sheet, open <strong>Extensions &gt; Apps Script</strong>.</li>
-    <li>Add the files from the EmailSpamdetection code: <code>Code.gs</code>, <code>Detect.gs</code> and <code>Dashboard.html</code>. Turn on "Show appsscript.json" in Project Settings and paste <code>appsscript.json</code> too.</li>
-    <li>Choose the <code>setup</code> function and press <strong>Run</strong>. Google asks you to allow access: this is your own script, so continue.</li>
-    <li>Press <strong>Deploy &gt; New deployment &gt; Web app</strong>. Set <em>Execute as: Me</em> and <em>Who has access: Only myself</em>. Bookmark the link: that's your dashboard.</li>
-    <li>Optional: turn on 2-Step Verification on your Google account. It protects your email and this dashboard together.</li>
-  </ol>
-  <p class="note">The first scan of your older mail runs in the background and can take an hour on a big mailbox. Protection starts right away.</p>
+  <details class="card fold" id="code">
+    <summary>See the code you copy (version @@APP_VERSION@@, @@APP_SIZE@@)</summary>
+    <textarea id="appcode" readonly spellcheck="false" aria-label="The app's code">@@APP_CODE@@</textarea>
+    <p><a href="/app.txt">Open it as a text file</a></p>
+  </details>
 </main>
 <footer class="wrap">EmailSpamdetection · Free · Your email never leaves your Google account.</footer>
+<script src="/setup.js"></script>
 </body>
 </html>

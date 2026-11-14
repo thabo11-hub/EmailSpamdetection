@@ -1,10 +1,12 @@
-// A fake Apps Script world (Gmail, Sheets, Properties, triggers...) so the real src/*.gs files can be
-// loaded and attacked in Node with no network and no packages. Only what the app uses is modelled.
+// A fake Apps Script world (Gmail, Properties, triggers...) so the real src/*.gs files, or the one-file
+// install built from them, can be loaded and attacked in Node with no network and no packages.
+// Only what the app uses is modelled, including Google's storage limits.
 import vm from 'node:vm';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { buildBundle } from '../scripts/build-web.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const OWNER = 'owner@example.com';
@@ -34,9 +36,9 @@ export function makeMessage(o = {}) {
 
 export function makeEnv(opts = {}) {
   const env = {
-    owner: OWNER, activeUser: opts.activeUser === undefined ? OWNER : opts.activeUser, props: new Map(), cache: new Map(),
+    owner: OWNER, activeUser: opts.activeUser === undefined ? OWNER : opts.activeUser, props: new Map(), scriptProps: new Map(), cache: new Map(),
     threads: [], labels: new Map(), drafts: [], triggers: [], sent: [], fetchLog: [], queries: [], trashed: [], spammed: [], logs: [],
-    fetchResponder: null, aliases: [], sheets: new Map(),
+    fetchResponder: null, aliases: [], authRequired: false, authUrl: 'https://accounts.google.com/o/oauth2/auth?client_id=1&scope=x',
   };
 
   const label = (name) => ({ getName: () => name, getThreads: (s, n) => env.threads.filter((t) => t.labels.has(name) && !t.trash).slice(s, s + n), getUnreadCount: () => 0 });
@@ -115,53 +117,36 @@ export function makeEnv(opts = {}) {
     return d;
   };
 
-  // Sheets: a cell holding a string that starts with "=" (and no apostrophe) becomes a formula, as in Google Sheets.
-  function makeSheet(name) {
-    const sh = { name, rows: [], frozen: 0, hidden: [] };
-    const set = (r, c, v) => {
-      while (sh.rows.length < r) sh.rows.push([]);
-      const row = sh.rows[r - 1];
-      if (typeof v === 'string' && v.startsWith("'")) row[c - 1] = { v: v.slice(1), formula: false };
-      else row[c - 1] = { v, formula: typeof v === 'string' && v.startsWith('=') };
-    };
-    const get = (r, c) => ((sh.rows[r - 1] || [])[c - 1] || { v: '' }).v;
-    sh.api = {
-      getName: () => name,
-      getLastRow: () => { for (let i = sh.rows.length; i > 0; i--) if (sh.rows[i - 1].some((x) => x && x.v !== '' && x.v !== null)) return i; return 0; },
-      getRange: (r, c, nr = 1, nc = 1) => {
-        const range = {
-          getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => get(r + i, c + j))),
-          setValues: (vals) => { if (vals.length !== nr || vals.some((row) => row.length !== nc)) throw new Error('size mismatch'); vals.forEach((row, i) => row.forEach((v, j) => set(r + i, c + j, v))); return range; },
-          clearContent: () => { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) set(r + i, c + j, ''); return range; },
-          setFontWeight: () => range,
-        };
-        return range;
+  // Properties, with Google's limits: 9 KB per value and 500 KB per store. A write that would go over fails whole.
+  const QUOTA = 500 * 1024;
+  const store = (map) => {
+    const api = {
+      getProperty: (k) => (map.has(k) ? map.get(k) : null),
+      setProperty: (k, v) => api.setProperties({ [k]: v }),
+      setProperties: (o) => {
+        const next = new Map(map);
+        for (const [k, v] of Object.entries(o)) {
+          if (Buffer.byteLength(String(v)) > 9216) throw new Error('Argument too large: value');
+          next.set(k, String(v));
+        }
+        let total = 0;
+        for (const [k, v] of next) total += Buffer.byteLength(k) + Buffer.byteLength(v);
+        if (total > QUOTA) throw new Error('You have exceeded the property storage quota. Please remove some properties and try again.');
+        for (const [k, v] of next) map.set(k, v);
+        return api;
       },
-      appendRow: (vals) => { const r = sh.api.getLastRow() + 1; vals.forEach((v, j) => set(r, j + 1, v)); },
-      deleteRows: (start, n) => { sh.rows.splice(start - 1, n); },
-      setFrozenRows: (n) => { sh.frozen = n; },
-      hideColumns: (c) => { sh.hidden.push(c); },
+      deleteProperty: (k) => { map.delete(k); return api; },
     };
-    return sh;
-  }
-  env.cells = (name) => (env.sheets.get(name) || { rows: [] }).rows;
-  const spreadsheet = {
-    getSheetByName: (n) => (env.sheets.has(n) ? env.sheets.get(n).api : null),
-    insertSheet: (n) => { const s = makeSheet(n); env.sheets.set(n, s); return s.api; },
-    getId: () => 'sheet-1',
+    return api;
   };
-
-  const props = {
-    getProperty: (k) => (env.props.has(k) ? env.props.get(k) : null),
-    setProperty: (k, v) => { if (Buffer.byteLength(String(v)) > 9216) throw new Error('Property value too large: ' + k); env.props.set(k, String(v)); return props; },
-    setProperties: (o) => { Object.entries(o).forEach(([k, v]) => props.setProperty(k, v)); return props; },
-    deleteProperty: (k) => { env.props.delete(k); return props; },
-  };
+  const props = store(env.props), scriptProps = store(env.scriptProps);
+  env.storeBytes = () => [...env.props].reduce((n, [k, v]) => n + Buffer.byteLength(k) + Buffer.byteLength(v), 0);
 
   const triggerBuilder = (fn) => {
-    const t = { fn, every: null, atHour: null };
+    const t = { fn, every: null, atHour: null, tz: null };
     const b = { timeBased: () => b, everyMinutes: (n) => { if (![1, 5, 10, 15, 30].includes(n)) throw new Error('bad interval'); t.every = n + 'm'; return b; },
       everyDays: (n) => { t.every = n + 'd'; return b; }, atHour: (h) => { t.atHour = h; return b; },
+      inTimezone: (tz) => { if (!/^(UTC|GMT|[A-Z][A-Za-z_]+\/[A-Za-z_\/+-]+)$/.test(tz) || /Atlantis/.test(tz)) throw new Error('Invalid argument: timezone'); t.tz = tz; return b; },
       create: () => { const tr = { getHandlerFunction: () => fn, _t: t }; env.triggers.push(tr); return tr; } };
     return b;
   };
@@ -174,10 +159,9 @@ export function makeEnv(opts = {}) {
     console: { log() {}, error: (...a) => env.logs.push(a.join(' ')), warn() {} },
     Date, Math, JSON, Object, Array, String, Number, RegExp, Error, isFinite, parseInt, encodeURIComponent, decodeURIComponent,
     GmailApp,
-    SpreadsheetApp: { getActive: () => spreadsheet, getActiveSpreadsheet: () => spreadsheet },
-    PropertiesService: { getScriptProperties: () => props },
-    CacheService: { getScriptCache: () => ({ get: (k) => (env.cache.has(k) ? env.cache.get(k) : null), put: (k, v) => env.cache.set(k, String(v)), remove: (k) => env.cache.delete(k) }) },
-    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {}, waitLock() {} }) },
+    PropertiesService: { getUserProperties: () => props, getScriptProperties: () => scriptProps },
+    CacheService: { getUserCache: () => ({ get: (k) => (env.cache.has(k) ? env.cache.get(k) : null), put: (k, v) => env.cache.set(k, String(v)), remove: (k) => env.cache.delete(k) }) },
+    LockService: { getUserLock: () => ({ tryLock: () => true, releaseLock() {}, waitLock() {} }) },
     Session: { getActiveUser: () => ({ getEmail: () => env.activeUser }), getEffectiveUser: () => ({ getEmail: () => env.owner }), getScriptTimeZone: () => 'Africa/Johannesburg' },
     Utilities: {
       formatDate: (d, tz, fmt) => { const p = (n) => String(n).padStart(2, '0'); return fmt.replace('yyyy', d.getFullYear()).replace('MM', p(d.getMonth() + 1)).replace('dd', p(d.getDate())); },
@@ -188,7 +172,9 @@ export function makeEnv(opts = {}) {
       if (r instanceof Error) throw r; return { getResponseCode: () => r.code, getContentText: () => r.body }; } },
     HtmlService: { createHtmlOutputFromFile: (n) => htmlOut(fs.readFileSync(path.join(ROOT, 'src', n + '.html'), 'utf8')), createHtmlOutput: (h) => htmlOut(h),
       XFrameOptionsMode: { DEFAULT: 'DEFAULT', ALLOWALL: 'ALLOWALL' } },
-    ScriptApp: { getProjectTriggers: () => env.triggers.slice(), deleteTrigger: (t) => { env.triggers = env.triggers.filter((x) => x !== t); }, newTrigger: triggerBuilder },
+    ScriptApp: { getProjectTriggers: () => env.triggers.slice(), deleteTrigger: (t) => { env.triggers = env.triggers.filter((x) => x !== t); }, newTrigger: triggerBuilder,
+      AuthMode: { FULL: 'FULL' }, AuthorizationStatus: { REQUIRED: 'REQUIRED', NOT_REQUIRED: 'NOT_REQUIRED' },
+      getAuthorizationInfo: () => ({ getAuthorizationStatus: () => (env.authRequired ? 'REQUIRED' : 'NOT_REQUIRED'), getAuthorizationUrl: () => env.authUrl }) },
   };
   return env;
 }
@@ -196,7 +182,8 @@ export function makeEnv(opts = {}) {
 export function loadApp(opts = {}) {
   const env = makeEnv(opts);
   const ctx = vm.createContext(env.globals);
-  for (const f of ['src/Detect.gs', 'src/Code.gs']) vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
+  if (opts.bundle) vm.runInContext(buildBundle().text, ctx, { filename: 'app.txt' });   // the one-file install
+  else for (const f of ['src/Detect.gs', 'src/Code.gs']) vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx, { filename: f });
   if (opts.setup !== false) env.props.set('owner', OWNER);
   return { app: ctx, env };
 }

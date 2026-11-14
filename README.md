@@ -6,16 +6,16 @@ Keeps phishing, scams and junk out of your Gmail, from inside your own Google ac
 - **Websites:** every website and mailing list that emails you, how much of it you open, and one-tap unsubscribe (the safe one-click standard) or block.
 - **Review before removing:** suggestions such as old promotions, old login codes and big attachments. Nothing is removed until you press Remove, and removed mail stays in Trash for 30 days.
 - **Outbox watch:** alerts you if your sent mail, drafts or scheduled emails look like someone else is using your account.
-- **Public site** (`web/`, on Vercel): a home page, the setup guide and a "check a suspicious email" tool that runs entirely in the browser.
+- **Public site** (`web/`, on Vercel): the phone setup with a one-tap copy button, and a "check a suspicious email" tool that runs entirely in the browser.
 
-## Set it up (about 5 minutes, on a computer)
-1. Create a Google Sheet called **EmailSpamdetection**.
-2. Open **Extensions > Apps Script**. Replace `Code.gs` with `src/Code.gs`, then add `src/Detect.gs` (a script file) and `src/Dashboard.html` (an HTML file called `Dashboard`).
-3. In **Project Settings**, tick "Show appsscript.json manifest file in editor", then paste `src/appsscript.json`.
-4. Select `setup` and press **Run**. Allow access. Google shows "unverified app" because this is your own script: choose **Advanced > Go to EmailSpamdetection**.
-5. **Deploy > New deployment > Web app**: *Execute as: Me*, *Who has access: Only myself*. Bookmark the link: that is your dashboard.
+## Set it up (3 steps, from your phone)
+Go to the website and follow the three cards: **Copy the app**, **Open Google Apps Script** (paste over everything, save), then **Deploy > New deployment > Web app > Deploy**, allow access and tap **Turn on protection** in your new app. Keep the defaults *Execute as: Me* and *Who has access: Only myself*.
 
-To switch it off: dashboard **Settings > Turn protection off**, or run `turnOff` in the editor.
+The copy button gives you `public/app.txt`: `src/Detect.gs`, `src/Code.gs` and `src/Dashboard.html` built into one file (`npm run build:web`), so there is only one thing to paste and no spreadsheet. Everything the app keeps (settings, senders, the clean-up list, recent activity) lives in your own private Apps Script storage.
+
+On a computer you can also paste the three files separately: `Code.gs`, `Detect.gs` and an HTML file called `Dashboard`.
+
+To switch it off: dashboard **More > Switch protection off**. To remove it completely, also remove its access at https://myaccount.google.com/connections.
 
 ## Develop
 ```

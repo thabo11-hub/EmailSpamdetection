@@ -31,7 +31,7 @@ jobs:
           const h=require('./vercel.json').headers[0].headers.map(x=>x.key);
           const need=['Content-Security-Policy','Strict-Transport-Security','X-Content-Type-Options','X-Frame-Options','Referrer-Policy','Permissions-Policy'];
           const miss=need.filter(n=>!h.includes(n)); if(miss.length){console.error('Missing headers:',miss);process.exit(1)} console.log('headers ok')"
-      - name: Build the website (only web/ and detect.js are published)
+      - name: Build the website (only web/, detect.js and the one-file app are published)
         run: node scripts/build-web.mjs
       - uses: actions/setup-python@v5
         with:
