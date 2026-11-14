@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check a suspicious email · EmailSpamdetection</title>
+<meta name="description" content="Paste a suspicious email and see if it looks like phishing. The check runs on your device: nothing you paste is sent anywhere.">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top"><div class="wrap"><a class="brand" href="/">EmailSpamdetection</a><a href="/#install">Set it up</a></div></header>
+<main class="wrap">
+  <section class="hero">
+    <h1>Is this email safe?</h1>
+    <p>Paste what you see. The check runs on your device: nothing you paste is sent anywhere, and this page can't send it.</p>
+  </section>
+  <form id="form" class="card" autocomplete="off">
+    <label>From <span class="help">The sender line, for example: PayPal &lt;service@paypa1.com&gt;</span><input id="from" type="text" inputmode="email" spellcheck="false"></label>
+    <label>Subject<input id="subject" type="text"></label>
+    <label>Message <span class="help">Paste the text of the email, including any links.</span><textarea id="body"></textarea></label>
+    <label>Attachment names <span class="help">Optional, separated by commas: invoice.pdf, photo.jpg</span><input id="attachments" type="text" spellcheck="false"></label>
+    <details>
+      <summary>More checks (optional)</summary>
+      <label>Reply-to address<input id="replyto" type="text" spellcheck="false"></label>
+      <label>Authentication-Results line <span class="help">In Gmail on a computer: open the email, tap the three dots, then "Show original", and copy the line that starts with "Authentication-Results".</span><textarea id="auth" spellcheck="false"></textarea></label>
+    </details>
+    <div class="row"><button id="check" class="btn primary" type="submit">Check</button><button id="clear" class="btn" type="reset">Clear</button></div>
+  </form>
+  <section id="result" class="card hidden" aria-live="polite"></section>
+</main>
+<footer class="wrap">EmailSpamdetection · This page sends nothing: its security policy blocks every connection.</footer>
+<script src="/detect.js"></script>
+<script src="/check.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+name: Security checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 4 * * 1" # weekly: new attack tricks and leaked-key patterns appear all the time
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the secret scan reads every commit
+      - name: Secret scan (every commit, every branch)
+        run: python3 .github/scripts/secret_scan.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: No runtime dependencies (nothing to go out of date)
+        run: node -e "const p=require('./package.json'); const d=Object.keys({...p.dependencies,...p.devDependencies}); if(d.length){console.error('Unexpected dependencies:',d);process.exit(1)} console.log('0 dependencies')"
+      - name: Attack and detection tests
+        run: npm test
+      - name: Website security headers are still in place
+        run: |
+          node -e "
+          const h=require('./vercel.json').headers[0].headers.map(x=>x.key);
+          const need=['Content-Security-Policy','Strict-Transport-Security','X-Content-Type-Options','X-Frame-Options','Referrer-Policy','Permissions-Policy'];
+          const miss=need.filter(n=>!h.includes(n)); if(miss.length){console.error('Missing headers:',miss);process.exit(1)} console.log('headers ok')"
+      - name: Build the website (only web/ and detect.js are published)
+        run: node scripts/build-web.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Real-browser XSS test
+        run: |
+          pip install playwright==1.48.0
+          python -m playwright install --with-deps chromium
+          python tests/xss_browser_test.py

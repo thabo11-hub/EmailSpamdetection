@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EmailSpamdetection: keep phishing and junk out of your Gmail</title>
+<meta name="description" content="Catches phishing, scams and dangerous attachments before you open them, lists every website that emails you, and cleans up old mail only after you approve. Runs inside your own Google account.">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top"><div class="wrap"><a class="brand" href="/">EmailSpamdetection</a><a href="/check">Check an email</a></div></header>
+<main class="wrap">
+  <section class="hero">
+    <h1>Keep phishing, scams and junk out of your Gmail.</h1>
+    <p>EmailSpamdetection runs inside your own Google account. It moves risky emails out of your inbox before you open them, and nothing is ever deleted without you.</p>
+    <div class="row"><a class="btn primary" href="/check">Check a suspicious email now</a><a class="btn" href="#install">Set it up</a></div>
+  </section>
+
+  <div class="grid">
+    <div class="card"><h3>Stops risky mail first</h3><p>Every few minutes it checks new mail for fake senders, look-alike websites and dangerous attachments, and moves those emails out of your inbox.</p></div>
+    <div class="card"><h3>Shows who emails you</h3><p>A list of every website and mailing list you're signed up to, how often you open them, and a one-tap unsubscribe or block.</p></div>
+    <div class="card"><h3>Review before removing</h3><p>It suggests old mail to clear out: expired promotions, old login codes, big attachments. You decide, and removed mail stays in Trash for 30 days.</p></div>
+    <div class="card"><h3>Watches your outbox</h3><p>If your sent mail, drafts or scheduled emails suddenly look like someone else is using your account, it tells you right away.</p></div>
+  </div>
+
+  <h2>Why it's safe</h2>
+  <p>Most inbox cleaners ask you to hand a company the keys to your email. This one doesn't: it runs in your own Google account, as you. There is no server that stores your email, no password database to steal and no public page that can reach your mail. Your dashboard is a private page that only your Google account can open.</p>
+
+  <h2 id="install">Set it up (about 5 minutes, on a computer)</h2>
+  <ol class="steps">
+    <li>Create a new Google Sheet and name it <strong>EmailSpamdetection</strong>.</li>
+    <li>In the sheet, open <strong>Extensions &gt; Apps Script</strong>.</li>
+    <li>Add the files from the EmailSpamdetection code: <code>Code.gs</code>, <code>Detect.gs</code> and <code>Dashboard.html</code>. Turn on "Show appsscript.json" in Project Settings and paste <code>appsscript.json</code> too.</li>
+    <li>Choose the <code>setup</code> function and press <strong>Run</strong>. Google asks you to allow access: this is your own script, so continue.</li>
+    <li>Press <strong>Deploy &gt; New deployment &gt; Web app</strong>. Set <em>Execute as: Me</em> and <em>Who has access: Only myself</em>. Bookmark the link: that's your dashboard.</li>
+    <li>Optional: turn on 2-Step Verification on your Google account. It protects your email and this dashboard together.</li>
+  </ol>
+  <p class="note">The first scan of your older mail runs in the background and can take an hour on a big mailbox. Protection starts right away.</p>
+</main>
+<footer class="wrap">EmailSpamdetection · Free · Your email never leaves your Google account.</footer>
+</body>
+</html>

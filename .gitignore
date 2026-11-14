@@ -1,0 +1,16 @@
+# Build output (made by scripts/build-web.mjs on Vercel)
+public/
+node_modules/
+.vercel/
+# Secrets and personal config never go in git
+.env
+.env.*
+!.env.example
+.clasprc.json
+.clasp.json
+*.pem
+*.key
+# Local noise
+*.log
+.DS_Store
+__pycache__/
