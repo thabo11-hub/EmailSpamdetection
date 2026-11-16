@@ -39,6 +39,7 @@ export function makeEnv(opts = {}) {
     owner: OWNER, activeUser: opts.activeUser === undefined ? OWNER : opts.activeUser, props: new Map(), scriptProps: new Map(), cache: new Map(),
     threads: [], labels: new Map(), drafts: [], triggers: [], sent: [], fetchLog: [], queries: [], trashed: [], spammed: [], logs: [],
     fetchResponder: null, aliases: [], authRequired: false, authUrl: 'https://accounts.google.com/o/oauth2/auth?client_id=1&scope=x',
+    serviceUrl: 'https://script.google.com/macros/s/AKfycbTEST_123-abc/exec',
   };
 
   const label = (name) => ({ getName: () => name, getThreads: (s, n) => env.threads.filter((t) => t.labels.has(name) && !t.trash).slice(s, s + n), getUnreadCount: () => 0 });
@@ -174,7 +175,8 @@ export function makeEnv(opts = {}) {
       XFrameOptionsMode: { DEFAULT: 'DEFAULT', ALLOWALL: 'ALLOWALL' } },
     ScriptApp: { getProjectTriggers: () => env.triggers.slice(), deleteTrigger: (t) => { env.triggers = env.triggers.filter((x) => x !== t); }, newTrigger: triggerBuilder,
       AuthMode: { FULL: 'FULL' }, AuthorizationStatus: { REQUIRED: 'REQUIRED', NOT_REQUIRED: 'NOT_REQUIRED' },
-      getAuthorizationInfo: () => ({ getAuthorizationStatus: () => (env.authRequired ? 'REQUIRED' : 'NOT_REQUIRED'), getAuthorizationUrl: () => env.authUrl }) },
+      getAuthorizationInfo: () => ({ getAuthorizationStatus: () => (env.authRequired ? 'REQUIRED' : 'NOT_REQUIRED'), getAuthorizationUrl: () => env.authUrl }),
+      getService: () => ({ getUrl: () => env.serviceUrl }) },
   };
   return env;
 }

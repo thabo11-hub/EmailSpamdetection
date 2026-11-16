@@ -259,7 +259,7 @@ function turnOnCard(o) {
     var tz = '';
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { tz = ''; }
     b.textContent = 'Turning on and checking your inbox...';
-    act(b, call('apiTurnOn', tz), 'Protection is on.').then(renderHome)
+    act(b, call('apiTurnOn', tz), function (m) { return typeof m === 'string' && m ? m : 'Protection is on.'; }).then(renderHome)
       .catch(function () { b.textContent = 'Try again'; });
   });
   return h('div', { class: 'card hero' },

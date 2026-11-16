@@ -18,7 +18,7 @@
 
 var APP_NAME = 'EmailSpamdetection';
 
-var APP_VERSION = '1.1.0';
+var APP_VERSION = '1.1.1';
 
 var LABEL_PARENT = 'EmailSpamdetection';
 
@@ -836,8 +836,26 @@ function turnOn_(tz) {
   }
   installTriggers_(getSettings_());
   log_('Protection switched on', me, '', '', 'Checks every ' + getSettings_().checkEveryMinutes + ' minutes');
+  var mailed = false;
+  try { mailed = emailAppLink_(me); } catch (e) { log_('Could not email your app link', me, '', '', clip_(e && e.message, 200)); }
   runGuard();
-  return 'Protection is on.';
+  return mailed ? 'Protection is on. Your app link is in your Gmail.' : 'Protection is on.';
+}
+
+// On a phone the web app link is easy to lose (Google's "Done" button closes it), so the first time
+// protection switches on, the app emails you its own link. Only a Google Apps Script address is sent,
+// and only to you.
+function emailAppLink_(me) {
+  var p = props_();
+  if (p.getProperty('linkSent')) return false;
+  var url = '';
+  try { url = String(ScriptApp.getService().getUrl() || ''); } catch (e) { url = ''; }
+  if (!safeHttpsUrl_(url) || !/^https:\/\/script\.google\.com\/(?:a\/macros\/[A-Za-z0-9.\-]+|macros)\/s\/[A-Za-z0-9_\-]+\/(?:exec|dev)$/.test(url)) return false;
+  GmailApp.sendEmail(me, APP_NAME + ': your app link', 'Tap to open your EmailSpamdetection app:\n' + url +
+    '\n\nOnly your Google account can open it. Tip: open it and use your browser\'s "Add to Home screen" so it opens like an app.\n', { name: APP_NAME });
+  p.setProperty('linkSent', String(Date.now()));
+  log_('App link emailed to you', me, '', '', 'So you can always find your app');
+  return true;
 }
 
 /** Switches all automatic checks off. Your settings and lists stay. */

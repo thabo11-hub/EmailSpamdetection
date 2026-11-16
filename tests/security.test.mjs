@@ -327,3 +327,24 @@ test('missing Google permission: a plain message and only a Google sign-in link'
   assert.equal(denied.app.htmlEscape_('"><script>&\''), '&quot;&gt;&lt;script&gt;&amp;&#39;');
   assert.doesNotMatch(page, /google\.script\.run/);
 });
+
+test('lost app link: the first turn-on emails you your own app link, once, and only a Google address', () => {
+  const { app, env } = loadApp({ setup: false });
+  let r = app.apiTurnOn('Africa/Johannesburg');
+  assert.equal(r.ok, true, r.error);
+  assert.match(r.data, /link is in your Gmail/);
+  const links = env.sent.filter((m) => /your app link/.test(m.subject));
+  assert.equal(links.length, 1);
+  assert.equal(links[0].to, OWNER, 'sent only to you');
+  assert.ok(links[0].body.includes(env.serviceUrl));
+  assert.equal(app.apiTurnOn('Africa/Johannesburg').ok, true);
+  assert.equal(env.sent.filter((m) => /your app link/.test(m.subject)).length, 1, 'not sent again');
+  for (const bad of ['javascript:alert(1)', 'https://evil.example/macros/s/abc/exec', 'https://script.google.com.evil.example/macros/s/abc/exec',
+    'https://script.google.com/macros/s/abc/exec?next=https://evil.example', null]) {
+    const fresh = loadApp({ setup: false });
+    fresh.env.serviceUrl = bad;
+    r = fresh.app.apiTurnOn('');
+    assert.equal(r.ok, true, 'turning on still works: ' + bad);
+    assert.equal(fresh.env.sent.filter((m) => /your app link/.test(m.subject)).length, 0, 'no email for ' + bad);
+  }
+});
