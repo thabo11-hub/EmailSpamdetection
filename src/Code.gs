@@ -18,7 +18,7 @@
 
 var APP_NAME = 'EmailSpamdetection';
 
-var APP_VERSION = '1.1.1';
+var APP_VERSION = '1.1.2';
 
 var LABEL_PARENT = 'EmailSpamdetection';
 
@@ -185,6 +185,26 @@ function toPlain_(msg, from) {
   try { rt = msg.getReplyTo() ? parseAddress_(msg.getReplyTo()).email : ''; } catch (e) { rt = ''; }
   return { fromName: from.name, fromEmail: from.email, replyTo: rt, subject: String(msg.getSubject() || ''), text: text, html: html,
     auth: safeHeader_(msg, 'Authentication-Results'), attachments: atts };
+}
+
+/**
+ * START HERE in the Apps Script editor: choose "setup" and press Run. It switches protection on (the same as
+ * the "Turn on protection" button) and writes your dashboard link in the Execution log.
+ * It is the first function in the file on purpose, so Run picks it by default.
+ */
+function setup() {
+  requireUser_();
+  var msg = turnOn_();
+  var url = appUrl_();
+  console.log(msg + ' ' + (url ? 'Your dashboard: ' + url : 'To get your dashboard: Deploy > New deployment > Web app > Deploy, then open the Web app link.'));
+  return msg;
+}
+
+// The address of your dashboard. Only a Google Apps Script web app address is ever returned.
+function appUrl_() {
+  var url = '';
+  try { url = String(ScriptApp.getService().getUrl() || ''); } catch (e) { url = ''; }
+  return safeHttpsUrl_(url) && /^https:\/\/script\.google\.com\/(?:a\/macros\/[A-Za-z0-9.\-]+|macros)\/s\/[A-Za-z0-9_\-]+\/(?:exec|dev)$/.test(url) ? url : '';
 }
 
 var MY_ADDRESSES_ = null;
@@ -818,9 +838,6 @@ function recentActivity_(n) {
   });
 }
 
-/** Optional: run from the Apps Script editor. The dashboard's "Turn on protection" button does the same. */
-function setup() { requireUser_(); return turnOn_(); }
-
 function turnOn_(tz) {
   var p = props_(), me = ownerEmail_();
   if (!me) throw userError_('Could not read your Google account. Open the app from its web app link.');
@@ -848,9 +865,8 @@ function turnOn_(tz) {
 function emailAppLink_(me) {
   var p = props_();
   if (p.getProperty('linkSent')) return false;
-  var url = '';
-  try { url = String(ScriptApp.getService().getUrl() || ''); } catch (e) { url = ''; }
-  if (!safeHttpsUrl_(url) || !/^https:\/\/script\.google\.com\/(?:a\/macros\/[A-Za-z0-9.\-]+|macros)\/s\/[A-Za-z0-9_\-]+\/(?:exec|dev)$/.test(url)) return false;
+  var url = appUrl_();
+  if (!url) return false;
   GmailApp.sendEmail(me, APP_NAME + ': your app link', 'Tap to open your EmailSpamdetection app:\n' + url +
     '\n\nOnly your Google account can open it. Tip: open it and use your browser\'s "Add to Home screen" so it opens like an app.\n', { name: APP_NAME });
   p.setProperty('linkSent', String(Date.now()));
@@ -943,8 +959,17 @@ function htmlEscape_(v) {
 }
 
 // The one-file install carries the page inside the script (DASHBOARD_HTML); the repo version uses Dashboard.html.
+// If the end of a pasted copy was cut off, say so plainly instead of showing Google's error.
 function dashboardOutput_() {
-  return typeof DASHBOARD_HTML === 'string' ? HtmlService.createHtmlOutput(DASHBOARD_HTML) : HtmlService.createHtmlOutputFromFile('Dashboard');
+  if (typeof DASHBOARD_HTML === 'string') return HtmlService.createHtmlOutput(DASHBOARD_HTML);
+  try {
+    return HtmlService.createHtmlOutputFromFile('Dashboard');
+  } catch (e) {
+    return HtmlService.createHtmlOutput('<div style="font:17px/1.5 sans-serif;padding:18px"><p><b>Part of the app is missing.</b> ' +
+      'The end of the code was cut off when it was pasted, so the dashboard page is not there.</p><p>Copy the app again from the ' +
+      'EmailSpamdetection website, paste it over everything in Code.gs and Save. The last line should say "End of EmailSpamdetection". ' +
+      'Then tap Deploy, Manage deployments, the pencil, Version: New version, Deploy.</p></div>');
+  }
 }
 
 // The dashboard works only for the Google account this copy runs as. If a copy were ever deployed as

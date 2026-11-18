@@ -28,7 +28,7 @@
       <ol class="taps">
         <li>Sign in with the Gmail you want to protect.</li>
         <li>Press and hold on the code that's there, tap <b>Select all</b>, then <b>Paste</b>. Only the app should be left.</li>
-        <li>Tap the <b>Save</b> icon.</li>
+        <li>Tap the <b>Save</b> icon. The very last line should say <b>End of EmailSpamdetection</b>; if it doesn't, the paste was cut off, so paste again.</li>
       </ol>
     </li>
     <li class="card step">
@@ -49,6 +49,8 @@
       <dd>Open <b>script.google.com</b> and tap <b>Untitled project</b>. Tap <b>Deploy</b>, then <b>Manage deployments</b>, then the <b>Web app</b> link (it ends in /exec). If that list is empty, do step 3 again.</dd>
       <dt>The Google page is tiny or hard to tap</dt>
       <dd>Open your browser menu and tick <b>Desktop site</b>, then try again.</dd>
+      <dt>"No HTML file named Dashboard" or "Part of the app is missing"</dt>
+      <dd>The end of the code was cut off when it was pasted. Copy the app again, paste over everything and Save, and check the last line says "End of EmailSpamdetection". Then tap Deploy, Manage deployments, the pencil, Version: New version, Deploy.</dd>
       <dt>"Script function not found: doGet"</dt>
       <dd>The code was pasted inside the old text. In the editor, Select all, Paste again and Save. Then tap Deploy, Manage deployments, the pencil, Version: New version, Deploy.</dd>
       <dt>"Sorry, unable to open the file at this time"</dt>

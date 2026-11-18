@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { buildBundle } from '../scripts/build-web.mjs';
 import { loadApp, makeMessage, OWNER, AUTH_PASS, DAY_MS } from './harness.mjs';
 
 const CODE = fs.readFileSync(new URL('../src/Code.gs', import.meta.url), 'utf8');
@@ -50,7 +51,7 @@ test('the page can only call the intended functions; everything else is private'
     assert.match(body, /return guarded_\(/, name + ' must go through the owner check');
   }
   assert.match(CODE, /function turnOff\(\) \{\n  requireUser_\(\);/, 'turnOff checks the owner too');
-  assert.match(CODE, /function setup\(\) \{ requireUser_\(\);/, 'setup checks the owner too');
+  assert.match(CODE, /function setup\(\) \{\n  requireUser_\(\);/, 'setup checks the owner too');
 });
 
 test('Gmail search injection: a crafted address cannot widen a delete', () => {
@@ -347,4 +348,29 @@ test('lost app link: the first turn-on emails you your own app link, once, and o
     assert.equal(r.ok, true, 'turning on still works: ' + bad);
     assert.equal(fresh.env.sent.filter((m) => /your app link/.test(m.subject)).length, 0, 'no email for ' + bad);
   }
+});
+
+test('one-file install survives pasting: short lines, a visible end line, and Run starts protection', () => {
+  const text = buildBundle().text;
+  const lines = text.split('\n');
+  const longest = Math.max(...lines.map((l) => l.length));
+  assert.ok(longest <= 1000, 'longest line is ' + longest + ' characters');
+  assert.match(lines.filter(Boolean).pop(), /^\/\/ End of EmailSpamdetection [0-9.]+\./);
+  const firstPublic = (/^function ([A-Za-z0-9]*[A-Za-z0-9])\(/m.exec(text.replace(/^function [A-Za-z0-9]*_\(.*$/gm, '')) || [])[1];
+  assert.equal(firstPublic, 'setup', 'Run in the editor picks setup by default');
+
+  const { app, env } = loadApp({ bundle: true, setup: false });
+  env.logs = [];
+  app.console.log = (...a) => env.logs.push(a.join(' '));
+  assert.match(app.setup(), /Protection is on/);
+  assert.ok(env.logs.some((l) => l.includes('Your dashboard: ' + env.serviceUrl)), 'the Execution log shows the dashboard link');
+});
+
+test('a cut-off paste explains itself instead of a Google error', () => {
+  const { app } = loadApp();
+  app.HtmlService.createHtmlOutputFromFile = () => { throw new Error('No HTML file named Dashboard was found.'); };
+  const page = app.doGet({ parameter: {} }).getContent();
+  assert.match(page, /cut off/);
+  assert.match(page, /End of EmailSpamdetection/);
+  assert.doesNotMatch(page, /google\.script\.run/);
 });

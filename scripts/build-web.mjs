@@ -25,8 +25,12 @@ export function buildBundle() {
     '// Source and tests: https://github.com/thabo11-hub/EmailSpamdetection',
     ''
   ].join('\n');
-  // JSON.stringify gives a safe JavaScript string for the page; the app shows it with HtmlService.createHtmlOutput.
-  const text = [header, detect.trim(), '', code.trim(), '', '// The dashboard page (src/Dashboard.html).', 'var DASHBOARD_HTML = ' + JSON.stringify(page) + ';', ''].join('\n');
+  // The page goes in as one short JavaScript string per line (JSON.stringify makes each one safe). One giant line
+  // can get cut off when pasted, so no line in the bundle is long. The last line marks the end, so a cut-off paste is easy to spot.
+  const pageLines = page.replace(/\r\n/g, '\n').split('\n').map((l) => '  ' + JSON.stringify(l));
+  const text = [header, detect.trim(), '', code.trim(), '', '// The dashboard page (src/Dashboard.html), one line per line.',
+    'var DASHBOARD_HTML = [', pageLines.join(',\n'), "].join('\\n');", '',
+    '// End of EmailSpamdetection ' + version + '. If this line is missing in your editor, the paste was cut off: copy the app again.', ''].join('\n');
   return { text, version };
 }
 
